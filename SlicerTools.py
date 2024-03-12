@@ -12,6 +12,28 @@ import SpineLib
 class SlicerTools:
 
     '''
+    Remeshing model
+    '''
+    def remesh(model, factor):
+        remesh = vtk.vtkQuadricDecimation()
+        remesh.SetInputData(model.GetPolyData())
+        remesh.SetTargetReduction(factor)
+        remesh.Update()
+        return remesh.GetOutput()
+
+    '''
+    Create model node
+    '''
+    def createModelNode(polydata, name, color=[1,0,0], opacity=1.0):
+        modelNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLModelNode', name)
+        modelNode.SetAndObservePolyData(polydata)
+        modelNode.CreateDefaultDisplayNodes()
+        modelDisplayNode = modelNode.GetDisplayNode()
+        modelDisplayNode.SetColor(color)
+        modelDisplayNode.SetOpacity(opacity)
+        return modelNode
+
+    '''
     Transform objects with matrix.
     '''
     def transformVertebraObjects(transformMatrix, vtObjects):
