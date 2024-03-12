@@ -27,6 +27,7 @@ from vtk import (
     vtkIdTypeArray,
     vtkOBBTree,
     vtkPlane,
+    vtkSphere,
     vtkClipPolyData,
     vtkCutter,
     vtkCenterOfMass,
@@ -185,6 +186,29 @@ def cut_plane(
 
     cutter = vtkCutter()
     cutter.SetCutFunction(plane)
+    cutter.SetInputData(polydata)
+    cutter.Update()
+
+    return cutter.GetOutput()
+
+def cut_sphere(
+    polydata: vtkPolyData, sphere_origin: Tuple3Float, sphere_radius: Tuple3Float
+) -> vtkPolyData:
+    """
+    Return vtkPolyData object where each vertex marks an intersection
+    between 'polydata's edges and a sphere.
+
+    Keyword Arguments:
+    polydata - vtk geometry to be intersected
+    sphere_origin - center of the cutting sphere
+    sphere_radius - radius of the cutting sphere
+    """
+    sphere = vtkSphere()
+    sphere.SetCenter(sphere_origin)
+    sphere.SetRadius(sphere_radius)
+
+    cutter = vtkCutter()
+    cutter.SetCutFunction(sphere)
     cutter.SetInputData(polydata)
     cutter.Update()
 
