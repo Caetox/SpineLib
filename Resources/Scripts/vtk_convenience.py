@@ -26,6 +26,7 @@ from vtk import (
     vtkRemovePolyData,
     vtkIdTypeArray,
     vtkOBBTree,
+    vtkCleanPolyData,
     vtkPlane,
     vtkSphere,
     vtkClipPolyData,
@@ -322,7 +323,17 @@ def delete_points(polydata: vtkPolyData, ids: vtkIdTypeArray) -> vtkPolyData:
     remove_filter.SetInputData(polydata)
     remove_filter.SetPointIds(ids)
     remove_filter.Update()
-    return remove_filter.GetOutput()
+    output = remove_filter.GetOutput()
+
+    cleaner = vtkCleanPolyData()
+    cleaner.SetInputData(output)
+    cleaner.SetTolerance(0.001)  # Adjust tolerance as needed
+    cleaner.PointMergingOn()
+    cleaner.Update()
+
+    cleaned_polydata = cleaner.GetOutput()
+
+    return cleaned_polydata
 
 
 def filter_point_ids(
@@ -340,7 +351,9 @@ def filter_point_ids(
     for id_ in range(polydata.GetNumberOfPoints()):
         if condition(id_):
             remove_ids.InsertNextTuple1(id_)
-    return delete_points(polydata, remove_ids)
+    filtered_polydata = delete_points(polydata, remove_ids)
+    filtered_polydata.Modified()
+    return filtered_polydata
 
 def filter_points(
     polydata: vtkPolyData, condition: Callable[[int], bool]
@@ -349,7 +362,9 @@ def filter_points(
     for id_ in range(polydata.GetNumberOfPoints()):
         if not condition(polydata.GetPoint(id_)):
             remove_ids.InsertNextTuple1(id_)
-    return delete_points(polydata, remove_ids)
+    filtered_polydata = delete_points(polydata, remove_ids)
+    filtered_polydata.Modified()
+    return filtered_polydata
 
 
 def _calc_normals(polydata: vtkPolyData) -> vtkDataArray:
