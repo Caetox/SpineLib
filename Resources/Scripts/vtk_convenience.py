@@ -30,6 +30,7 @@ from vtk import (
     vtkPlane,
     vtkSphere,
     vtkClipPolyData,
+    vtkCellLocator,
     vtkCutter,
     vtkCenterOfMass,
     vtkAbstractPolyDataReader,
@@ -38,6 +39,7 @@ from vtk import (
     vtkPoints,
     vtkPointSet,
     vtkAxisActor,
+    mutable
 )
 from numpy import zeros, array, dot, ndarray
 from numpy.linalg import norm
@@ -485,3 +487,26 @@ def sorted_points(polydata, main_axis):
     projection = lambda p: np.array(p).dot(main_axis)
 
     return sorted(points, key=projection)
+
+def get_intersection_points(polydata, point1, point2):
+
+    # Create a locator for the model
+    locator = vtkCellLocator()
+    locator.SetDataSet(polydata)
+    locator.BuildLocator()
+
+    # Initialize intersection points
+    intersection_point = None
+    t = mutable(0)
+    x = [0.0, 0.0, 0.0]
+    pcoords = [0.0, 0.0, 0.0]
+    subId = mutable(0)
+
+    # Check for intersection between the line segment and the model
+    intersect = locator.IntersectWithLine(point1, point2, 0.001, t, x, pcoords, subId)
+
+    # If intersection found, add the intersection point to the list
+    if intersect:
+        intersection_point = x
+
+    return intersection_point

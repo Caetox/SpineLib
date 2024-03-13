@@ -27,6 +27,7 @@ from .SlicerTools import *
 from .FacetJointAlignment import *
 from .IVD_Center import *
 from .Properties import *
+from .ShapeDecomposition import *
 from .VertebralBody import *
 from .Spine import *
 from .UpApproximator import *

@@ -12,9 +12,9 @@ class Vertebra:
     def __init__(self,
                  spineGeometries:   vtk.vtkPolyData         = None,
                  geometry:          vtk.vtkPolyData         = None,
-                 spineOrientation:  SpineLib.Orientation  = None,
+                 spineOrientation:  SpineLib.Orientation    = None,
                  max_angle:         float                   = None,
-                 landmarks:         SpineLib.Landmarks    = None
+                 landmarks:         SpineLib.Landmarks      = None
                  ) -> None:
         
         self.landmarks       = landmarks
@@ -154,5 +154,18 @@ class Vertebra:
         
         return objectToWorldMatrix
      
+    '''
+    Shape decomposition
+    '''
+    def get_shape_decomposition(self) -> SpineLib.ShapeDecomposition:
+
+        shapeDecomposition = SpineLib.ShapeDecomposition(geometry=self.geometry, center=self.center, size=self.size, orientation=self.orientation)
+        return shapeDecomposition
+
+    # '''
+    # Compute ligament landmarks
+    # '''
+    # def get_ligament_landmarks() -> vtk.vtkPoints:
+    #     pass
         
 
