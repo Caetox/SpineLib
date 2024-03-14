@@ -34,8 +34,22 @@ class SegmentationImage:
         exportFolderItemId = shNode.CreateFolderItem(shNode.GetSceneItemID(), "Segments")
         slicer.modules.segmentations.logic().ExportAllSegmentsToModels(segmentationNode, exportFolderItemId)
 
+        # get all models in exportFolderItemId
+        children = vtk.vtkIdList()
+        nodes = []
+        shNode.GetItemChildren(exportFolderItemId, children)
+        for i in range(children.GetNumberOfIds()):
+            child = children.GetId(i)
+            print("Child: ", child)
+            nodes.append(shNode.GetItemDataNode(child))
+            print("Node: ", shNode.GetItemDataNode(child))
+
+        print(children)
+        print(nodes)
+
         slicer.mrmlScene.RemoveNode(segmentationNode)
 
+        return nodes
 
     '''
     Create a vtkMRMLScalarVolumeNode from a numpy image, with the provided origin, spacing and direction.
