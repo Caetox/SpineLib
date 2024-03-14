@@ -510,3 +510,38 @@ def get_intersection_points(polydata, point1, point2):
         intersection_point = x
 
     return intersection_point
+
+def get_curve_intersection_points(model, curve_node):
+# Get model and curve objects
+    curve = curve_node.GetCurvePointsWorld()
+
+    # Create a locator for the model
+    locator = vtkCellLocator()
+    locator.SetDataSet(model)
+    locator.BuildLocator()
+
+    # Initialize intersection points
+    intersection_points = []
+
+    # Iterate through points in the curve
+    for i in range(curve.GetNumberOfPoints() - 1):
+        # Get two consecutive points on the curve
+        point1 = [0, 0, 0]
+        point2 = [0, 0, 0]
+        curve.GetPoint(i, point1)
+        curve.GetPoint(i + 1, point2)
+
+        # Initialize intersection point and parameters
+        t = mutable(0)
+        x = [0.0, 0.0, 0.0]
+        pcoords = [0.0, 0.0, 0.0]
+        subId = mutable(0)
+
+        # Check for intersection between the line segment and the model
+        intersect = locator.IntersectWithLine(point1, point2, 0.001, t, x, pcoords, subId)
+
+        # If intersection found, add the intersection point to the list
+        if intersect:
+            intersection_points.append(x)
+
+    return intersection_points
