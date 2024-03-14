@@ -40,12 +40,7 @@ class SegmentationImage:
         shNode.GetItemChildren(exportFolderItemId, children)
         for i in range(children.GetNumberOfIds()):
             child = children.GetId(i)
-            print("Child: ", child)
             nodes.append(shNode.GetItemDataNode(child))
-            print("Node: ", shNode.GetItemDataNode(child))
-
-        print(children)
-        print(nodes)
 
         slicer.mrmlScene.RemoveNode(segmentationNode)
 
@@ -68,7 +63,7 @@ class SegmentationImage:
         volumeNode.SetSpacing(spacing)
         volumeNode.SetIJKToRASDirections(directions)
         volumeNode.SetAndObserveImageData(imageData)
-        volumeNode.CreateDefaultDisplayNodes()
+        #volumeNode.CreateDefaultDisplayNodes()
         volumeNode.CreateDefaultStorageNode()
         slicer.util.setSliceViewerLayers(background = volumeNode)
         slicer.util.resetSliceViews()
@@ -79,7 +74,7 @@ class SegmentationImage:
     '''
     Create segments from a segmentation image
     '''
-    def segmentImg_to_segments(image):
+    def segmentImg_to_segments(image_array):
 
         volumeNode          =   slicer.mrmlScene.GetFirstNodeByName("SegmentationVolumeNode")
         image               =   slicer.util.arrayFromVolume(volumeNode)
@@ -132,7 +127,7 @@ class SegmentationImage:
         sorted_labels = [label[0] for label in labels]
 
         # only take first 6 elements (S1, L5, L4, L3, L2, L1)
-        sorted_labels = sorted_labels[:6]
+        #sorted_labels = sorted_labels[:6]
 
         return sorted_labels
     
