@@ -14,20 +14,23 @@ class SegmentationImage:
     For each segmented region, an individual model is added.
     '''
     def createModelsFromNumpy(imageFilePath: str,
-                              origin: np.array,
-                              spacing: np.array,
-                              directions: np.ndarray
+                              volumeNode: slicer.vtkMRMLScalarVolumeNode,
                               ):
 
         # load numpy image
-        numpyImage = np.load(imageFilePath)
+        imageArray = np.load(imageFilePath)
+
+        spacing = volumeNode.GetSpacing()
+        directions = np.zeros([3, 3])
+        volumeNode.GetIJKToRASDirections(directions)
+        origin = volumeNode.GetOrigin()
 
         # convert numpy image to segmentation volume
-        segmentationVolumeNode  =   SpineLib.SegmentationImage.numpy_to_volume(numpyImage,origin,spacing,directions)
+        #segmentationVolumeNode  =   SpineLib.SegmentationImage.numpy_to_volume(numpyImage,origin,spacing,directions)
         
         # create segments from segmentation volume
-        segmentationImage       =   slicer.util.arrayFromVolume(segmentationVolumeNode)
-        segmentationNode        =   SpineLib.SegmentationImage.segmentImg_to_segments(segmentationImage)
+        #segmentationImage       =   slicer.util.arrayFromVolume(segmentationVolumeNode)
+        segmentationNode        =   SpineLib.SegmentationImage.segmentImg_to_segments(imageArray, volumeNode)
 
         # convert segments to models
         shNode = slicer.mrmlScene.GetSubjectHierarchyNode()
@@ -74,11 +77,9 @@ class SegmentationImage:
     '''
     Create segments from a segmentation image
     '''
-    def segmentImg_to_segments(image_array):
+    def segmentImg_to_segments(image_array, volumeNode):
 
-        volumeNode          =   slicer.mrmlScene.GetFirstNodeByName("SegmentationVolumeNode")
-        image               =   slicer.util.arrayFromVolume(volumeNode)
-        label_image         =   SpineLib.SegmentationImage.filtered_label_image(image)
+        label_image         =   SpineLib.SegmentationImage.filtered_label_image(image_array)
         sorted_labels       =   SpineLib.SegmentationImage.get_sorted_labels(label_image)
         segmentationNode    =   SpineLib.SegmentationImage.create_segments(volumeNode, label_image, sorted_labels)
 
@@ -99,7 +100,9 @@ class SegmentationImage:
         label_sizes = [np.count_nonzero(temp_label_img == x) for x in range(1,num+1)]
         mean = np.mean(label_sizes, axis=0)
         sd = np.std(label_sizes, axis=0)
-        threshold = mean - 2 * sd
+        print("SD: ", sd)
+        print("Mean: ", mean)
+        threshold = mean - sd
 
         # remove small objects
         image_filtered = skimage.morphology.remove_small_objects(image_opened, threshold)
@@ -127,7 +130,8 @@ class SegmentationImage:
         sorted_labels = [label[0] for label in labels]
 
         # only take first 6 elements (S1, L5, L4, L3, L2, L1)
-        #sorted_labels = sorted_labels[:6]
+        sorted_labels = sorted_labels[:6]
+
 
         return sorted_labels
     
