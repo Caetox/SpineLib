@@ -560,3 +560,5 @@ def voxelization(geometry: vtkPolyData, factor):
     density = diagonal_length / factor
     voxels = pv.voxelize(geometry, density=density)
     return voxels.points
+
+# test
