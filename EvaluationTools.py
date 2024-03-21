@@ -12,7 +12,6 @@ import open3d as o3d
 import SpineLib
 
 
-
 '''
 Evaluation metrics for scalar array
 '''

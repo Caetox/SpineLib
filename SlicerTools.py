@@ -61,6 +61,32 @@ class SlicerTools:
                 vtObject.HardenTransform()
             slicer.mrmlScene.RemoveNode(transformNode)
     
+    '''
+    create point cloud as Slicer node from a numpy array (x,3)
+    '''
+    def createPointCloudNode(points, radius=2.0):
+            
+        # Create the vtkPoints object.
+        vtk_points = vtk.vtkPoints()
+        vtk_points.SetData(vtk.util.numpy_support.numpy_to_vtk(points))
+
+        # Create the vtkPolyData object.
+        polydata = vtk.vtkPolyData()
+        polydata.SetPoints(vtk_points)
+
+        # Create the vtkSphereSource object.
+        sphere = vtk.vtkSphereSource()
+        sphere.SetRadius(radius)
+
+        # Create the vtkGlyph3D object.
+        glyph = vtk.vtkGlyph3D()
+        glyph.SetInputData(polydata)
+        glyph.SetSourceConnection(sphere.GetOutputPort())
+
+
+        pointCloudModelNode = slicer.modules.models.logic().AddModel(glyph.GetOutputPort())
+            
+
 
 
     '''
