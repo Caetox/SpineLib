@@ -84,7 +84,7 @@ class SlicerTools:
         return pointListNode
     
     '''
-    Create a markups curve node for a markups fiducial point list.
+    Create a markups line node from start and end coordinates
     '''
     def markupsCurveNode(pointListNode):
 
@@ -97,6 +97,17 @@ class SlicerTools:
         slicer.util.updateMarkupsControlPointsFromArray(curveNode, coordinates)
 
         return curveNode
+
+    '''
+    Create a markups line node for a markups fiducial point list.
+    '''
+    def markupsLineNode(lineNodeName, lineStartPos, lineEndPos):
+
+        lineNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsLineNode", lineNodeName)
+        lineNode.AddControlPointWorld(lineStartPos, f'start_{lineNode}')
+        lineNode.AddControlPointWorld(lineEndPos, f'end_{lineNode}')
+
+        return lineNode
     
 
     '''
@@ -105,6 +116,7 @@ class SlicerTools:
     '''
     # TODO: seperate functionality for getting orientation and creating bounding boxes (apply bounding box function to individual vertebrae)
     # TODO: seperate functionality for creating vtk Bounding Box and adding vtkMRMLROINode
+    
     def orientedBoundingBoxes(modelNodes, curveNode):
 
         orientedBoxes = []
