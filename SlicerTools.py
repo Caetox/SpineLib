@@ -200,3 +200,15 @@ class SlicerTools:
         else:
             # Single node
             slicer.mrmlScene.RemoveNode(node_structure)
+
+
+    '''
+    Return verticies of the mesh from model node (3D) as numpy array
+    '''
+    def pointsFromModelNode_asNumPy(modelNode):
+        
+        assert modelNode is not None
+        polydata = modelNode.GetPolyData()
+        pointsData = polydata.GetPoints().GetData()
+        return vtk_to_numpy(pointsData)
+
