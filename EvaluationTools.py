@@ -12,60 +12,59 @@ import open3d as o3d
 import SpineLib
 
 
-class EvaluationTools:
 
-    '''
-    Evaluation metrics for scalar array
-    '''
-    def scalars_difference_metrics(source_values, target_values):
+'''
+Evaluation metrics for scalar array
+'''
+def scalars_difference_metrics(source_values, target_values):
 
-        differences = np.abs(np.subtract(source_values, target_values))
-        mean = np.mean(differences)
-        std  = np.std(differences)
-        rmse = math.sqrt(np.square(np.subtract(source_values,target_values)).mean())
+    differences = np.abs(np.subtract(source_values, target_values))
+    mean = np.mean(differences)
+    std  = np.std(differences)
+    rmse = math.sqrt(np.square(np.subtract(source_values,target_values)).mean())
 
-        return mean, std, rmse
-    
-    '''
-    Evaluation metrics for 3D points array
-    '''
-    def points_difference_metrics(source_values, target_values):
+    return mean, std, rmse
 
-        differences = np.linalg.norm(np.subtract(source_values,target_values), axis=1)
-        mean = np.mean(differences)
-        std  = np.std(differences)
-        rmse = math.sqrt(np.square(np.subtract(source_values,target_values)).mean())
+'''
+Evaluation metrics for 3D points array
+'''
+def points_difference_metrics(source_values, target_values):
 
-        return mean, std, rmse
+    differences = np.linalg.norm(np.subtract(source_values,target_values), axis=1)
+    mean = np.mean(differences)
+    std  = np.std(differences)
+    rmse = math.sqrt(np.square(np.subtract(source_values,target_values)).mean())
 
-    '''
-    Calculate model to model distance (to surface) with pyvista
-    '''
-    def modelToModel_surface_distances(vtk_source, vtk_target):
+    return mean, std, rmse
 
-        source = pyvista.PolyData(vtk_source)
-        target = pyvista.PolyData(vtk_target)
-            
-        closest_cells, closest_points = source.find_closest_cell(target.points, return_closest_point=True)
-        d_exact = np.linalg.norm(target.points - closest_points, axis=1)
-        mean = np.mean(d_exact)
-        std  = np.std(d_exact)
-        rmse = math.sqrt(np.square(np.subtract(closest_points,target.points)).mean())
+'''
+Calculate model to model distance (to surface) with pyvista
+'''
+def modelToModel_surface_distances(vtk_source, vtk_target):
 
-        return mean, std, rmse
+    source = pyvista.PolyData(vtk_source)
+    target = pyvista.PolyData(vtk_target)
+        
+    closest_cells, closest_points = source.find_closest_cell(target.points, return_closest_point=True)
+    d_exact = np.linalg.norm(target.points - closest_points, axis=1)
+    mean = np.mean(d_exact)
+    std  = np.std(d_exact)
+    rmse = math.sqrt(np.square(np.subtract(closest_points,target.points)).mean())
 
-    '''
-    Calculate pointcloud distance with ICP
-    '''
-    def icp_distances(vtk_source, vtk_target):
+    return mean, std, rmse
 
-        # Create a pointclouds from the vtk vertices
-        source = o3d.geometry.PointCloud()
-        source.points = o3d.utility.Vector3dVector(np.asarray(vtk_source.GetPoints().GetData()))
-        target = o3d.geometry.PointCloud()
-        target.points = o3d.utility.Vector3dVector(np.asarray(vtk_target.GetPoints().GetData()))
+'''
+Calculate pointcloud distance with ICP
+'''
+def icp_distances(vtk_source, vtk_target):
 
-        threshold = 10000
-        evaluation = o3d.pipelines.registration.evaluate_registration(source, target, threshold)
+    # Create a pointclouds from the vtk vertices
+    source = o3d.geometry.PointCloud()
+    source.points = o3d.utility.Vector3dVector(np.asarray(vtk_source.GetPoints().GetData()))
+    target = o3d.geometry.PointCloud()
+    target.points = o3d.utility.Vector3dVector(np.asarray(vtk_target.GetPoints().GetData()))
 
-        return evaluation.fitness, evaluation.inlier_rmse
+    threshold = 10000
+    evaluation = o3d.pipelines.registration.evaluate_registration(source, target, threshold)
+
+    return evaluation.fitness, evaluation.inlier_rmse

@@ -35,6 +35,7 @@ class SlicerTools:
 
     '''
     Transform objects with matrix.
+    vtObjects: list containing Slicer nodes
     '''
     def transformVertebraObjects(transformMatrix, vtObjects):
             
@@ -206,7 +207,7 @@ class SlicerTools:
     Return verticies of the mesh from model node (3D) as numpy array
     '''
     def pointsFromModelNode_asNumPy(modelNode):
-        
+
         assert modelNode is not None
         polydata = modelNode.GetPolyData()
         pointsData = polydata.GetPoints().GetData()
