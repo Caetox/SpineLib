@@ -104,8 +104,8 @@ class SlicerTools:
     def markupsLineNode(lineNodeName, lineStartPos, lineEndPos):
 
         lineNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsLineNode", lineNodeName)
-        lineNode.AddControlPointWorld(lineStartPos, f'start_{lineNode}')
-        lineNode.AddControlPointWorld(lineEndPos, f'end_{lineNode}')
+        lineNode.AddControlPointWorld(lineStartPos, f'start_{lineNodeName}')
+        lineNode.AddControlPointWorld(lineEndPos, f'end_{lineNodeName}')
 
         return lineNode
     
