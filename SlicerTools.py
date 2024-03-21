@@ -35,7 +35,7 @@ class SlicerTools:
 
     '''
     Transform objects with matrix.
-    vtObjects: list containing Slicer nodes
+    vtObjects: list containing Slicer nodes such as model and corresposponding landmarks, sourceimage (CT/MRI) or source labelmap
     '''
     def transformVertebraObjects(transformMatrix, vtObjects):
             
@@ -46,6 +46,22 @@ class SlicerTools:
                     vtObject.SetAndObserveTransformNodeID(transformNode.GetID())
                     vtObject.HardenTransform()
             slicer.mrmlScene.RemoveNode(transformNode)
+
+
+    '''
+    Transform one object with transformation matrix.
+    vtObject: Slicer node to be transformed
+    '''
+    def transformOneObject(transformMatrix, vtObject):
+            
+            transformNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLTransformNode')
+            transformNode.SetMatrixTransformToParent(transformMatrix)
+            if (vtObject is not None):
+                vtObject.SetAndObserveTransformNodeID(transformNode.GetID())
+                vtObject.HardenTransform()
+            slicer.mrmlScene.RemoveNode(transformNode)
+    
+
 
     '''
     Approximate the surface normal of a given coordinate on a polydata.
