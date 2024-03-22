@@ -20,16 +20,16 @@ class SegmentationImage:
         # load numpy image
         imageArray = np.load(imageFilePath)
 
-        spacing = volumeNode.GetSpacing()
-        directions = np.zeros([3, 3])
-        volumeNode.GetIJKToRASDirections(directions)
-        origin = volumeNode.GetOrigin()
+        # spacing = volumeNode.GetSpacing()
+        # directions = np.zeros([3, 3])
+        # volumeNode.GetIJKToRASDirections(directions)
+        # origin = volumeNode.GetOrigin()
 
-        # convert numpy image to segmentation volume
-        #segmentationVolumeNode  =   SpineLib.SegmentationImage.numpy_to_volume(numpyImage,origin,spacing,directions)
+        # # convert numpy image to segmentation volume
+        # segmentationVolumeNode  =   SpineLib.SegmentationImage.numpy_to_volume(imageArray,origin,spacing,directions)
         
-        # create segments from segmentation volume
-        #segmentationImage       =   slicer.util.arrayFromVolume(segmentationVolumeNode)
+        # # create segments from segmentation volume
+        # #segmentationImage       =   slicer.util.arrayFromVolume(segmentationVolumeNode)
         segmentationNode        =   SpineLib.SegmentationImage.segmentImg_to_segments(imageArray, volumeNode)
 
         # convert segments to models
