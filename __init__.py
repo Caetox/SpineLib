@@ -30,6 +30,7 @@ for module_ in pip_modules:
                      .format(module_))
         pip.main(['install', module_])
 
+# install required extensions
 import slicer
 for extensionName in extensions:
     em = slicer.app.extensionsManagerModel()
@@ -56,7 +57,7 @@ from_module_import("vtk_convenience")
 
 
 
-# import Registration Library Files
+# import Library Files
 
 from .SegmentationImage import *
 from .SlicerTools import *
