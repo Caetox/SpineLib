@@ -35,6 +35,7 @@ class SlicerTools:
 
     '''
     Transform objects with matrix.
+    vtObjects: list containing Slicer nodes such as model and corresposponding landmarks, sourceimage (CT/MRI) or source labelmap
     '''
     def transformVertebraObjects(transformMatrix, vtObjects):
             
@@ -45,6 +46,48 @@ class SlicerTools:
                     vtObject.SetAndObserveTransformNodeID(transformNode.GetID())
                     vtObject.HardenTransform()
             slicer.mrmlScene.RemoveNode(transformNode)
+
+
+    '''
+    Transform one object with transformation matrix.
+    vtObject: Slicer node to be transformed
+    '''
+    def transformOneObject(transformMatrix, vtObject):
+            
+            transformNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLTransformNode')
+            transformNode.SetMatrixTransformToParent(transformMatrix)
+            if (vtObject is not None):
+                vtObject.SetAndObserveTransformNodeID(transformNode.GetID())
+                vtObject.HardenTransform()
+            slicer.mrmlScene.RemoveNode(transformNode)
+    
+    '''
+    create point cloud as Slicer node from a numpy array (x,3)
+    '''
+    def createPointCloudNode(points, radius=2.0):
+            
+        # Create the vtkPoints object.
+        vtk_points = vtk.vtkPoints()
+        vtk_points.SetData(vtk.util.numpy_support.numpy_to_vtk(points))
+
+        # Create the vtkPolyData object.
+        polydata = vtk.vtkPolyData()
+        polydata.SetPoints(vtk_points)
+
+        # Create the vtkSphereSource object.
+        sphere = vtk.vtkSphereSource()
+        sphere.SetRadius(radius)
+
+        # Create the vtkGlyph3D object.
+        glyph = vtk.vtkGlyph3D()
+        glyph.SetInputData(polydata)
+        glyph.SetSourceConnection(sphere.GetOutputPort())
+
+
+        pointCloudModelNode = slicer.modules.models.logic().AddModel(glyph.GetOutputPort())
+            
+
+
 
     '''
     Approximate the surface normal of a given coordinate on a polydata.
@@ -84,7 +127,7 @@ class SlicerTools:
         return pointListNode
     
     '''
-    Create a markups curve node for a markups fiducial point list.
+    Create a markups line node from start and end coordinates
     '''
     def markupsCurveNode(pointListNode):
 
@@ -97,6 +140,17 @@ class SlicerTools:
         slicer.util.updateMarkupsControlPointsFromArray(curveNode, coordinates)
 
         return curveNode
+
+    '''
+    Create a markups line node for a markups fiducial point list.
+    '''
+    def markupsLineNode(lineNodeName, lineStartPos, lineEndPos):
+
+        lineNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsLineNode", lineNodeName)
+        lineNode.AddControlPointWorld(lineStartPos, f'start_{lineNodeName}')
+        lineNode.AddControlPointWorld(lineEndPos, f'end_{lineNodeName}')
+
+        return lineNode
     
 
     '''
@@ -105,6 +159,7 @@ class SlicerTools:
     '''
     # TODO: seperate functionality for getting orientation and creating bounding boxes (apply bounding box function to individual vertebrae)
     # TODO: seperate functionality for creating vtk Bounding Box and adding vtkMRMLROINode
+    
     def orientedBoundingBoxes(modelNodes, curveNode):
 
         orientedBoxes = []
@@ -188,3 +243,15 @@ class SlicerTools:
         else:
             # Single node
             slicer.mrmlScene.RemoveNode(node_structure)
+
+
+    '''
+    Return verticies of the mesh from model node (3D) as numpy array
+    '''
+    def pointsFromModelNode_asNumPy(modelNode):
+
+        assert modelNode is not None
+        polydata = modelNode.GetPolyData()
+        pointsData = polydata.GetPoints().GetData()
+        return vtk_to_numpy(pointsData)
+

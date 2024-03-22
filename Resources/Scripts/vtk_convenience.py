@@ -11,6 +11,7 @@ them.
 from typing import Union, Generator, Tuple, List, Callable
 from math import cos, radians
 import numpy as np
+import pyvista as pv
 
 # pylint: disable=no-name-in-module
 from vtk import (
@@ -545,3 +546,19 @@ def get_curve_intersection_points(model, curve_node):
             intersection_points.append(x)
 
     return intersection_points
+
+def pca_eigenvectors(points):
+    # Compute the covariance matrix and principal components without centering
+    Cov = np.cov(points.T)
+    eigval, eigvect = np.linalg.eig(Cov.T)
+
+    return eigvect.T
+
+def voxelization(geometry: vtkPolyData, factor):
+    bounds = geometry.GetBounds()
+    diagonal_length = ((bounds[1] - bounds[0])**2 + (bounds[3] - bounds[2])**2 + (bounds[5] - bounds[4])**2)**0.5
+    density = diagonal_length / factor
+    voxels = pv.voxelize(geometry, density=density)
+    return voxels.points
+
+# test
