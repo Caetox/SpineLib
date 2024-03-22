@@ -8,10 +8,12 @@ import seaborn as sns
 from scipy.signal import find_peaks, argrelextrema
 from sklearn.cluster import KMeans
 import matplotlib
-matplotlib.use('WXAgg')
+#matplotlib.use('Qt5Agg')
+matplotlib.use("wxAgg")
 import matplotlib.pyplot as plt
 import SpineLib
 import slicer
+import ExtractCenterline
 
 
 class ShapeDecomposition:
@@ -24,8 +26,87 @@ class ShapeDecomposition:
                  ) -> None:
         
         self.threshold, self.body, self.processes = ShapeDecomposition._pdf_decomposition(geometry, center, size, orientation)
+        self.landmarks = ShapeDecomposition._landmarks(geometry, center, size, orientation, self.threshold)
+        self.segmented_processes, self.process_landmarks = ShapeDecomposition._segment_processes(self.processes, self.landmarks, center, size, orientation)
+
+    '''
+    Segment the processes of the vertebra
+    '''
+    def _segment_processes(
+            processes:         vtk.vtkPolyData         = None,
+            landmarks:         Dict                    = None,
+            center:            np.array                = None,
+            size:              SpineLib.Size           = None,
+            orientation:       SpineLib.Orientation    = None,
+            ):
+        
+        left_pedicle_medial = landmarks["left_pedicle_medial"]
+        right_pedicle_medial = landmarks["right_pedicle_medial"]
+        curve = ShapeDecomposition.centerline(processes, left_pedicle_medial, right_pedicle_medial)
+        sampledPoints = curve.GetCurvePointsWorld()
+        sampledPoints = numpy_support.vtk_to_numpy(sampledPoints.GetData())
+        canalPoints = [sampledPoints[i] for i in range(0, len(sampledPoints), len(sampledPoints)//4)]
+        process_endpoints = {"TL":  left_pedicle_medial,
+                                "ASL": canalPoints[0],
+                                "AIL": canalPoints[1],
+                                "S":   canalPoints[2],
+                                "AIR": canalPoints[3],
+                                "ASR": canalPoints[4],
+                                "TR":  right_pedicle_medial}
+        
+        # segmentation of processes
+        initial_segmented_polydata, process_label_ids, process_points, landmarks = ShapeDecomposition.clustering(processes, orientation, n_clusters=8)
+
+        # centerlines
+        centerlines = {"TL": [], "ASL": [], "AIL": [], "S": [], "AIR": [], "ASR": [], "TR": []}
+        for name, point in landmarks.items():
+            centerlines[name] = ShapeDecomposition.centerline(processes, point, process_endpoints[name])
+
+        segmented_polydata = ShapeDecomposition.centerline_segmentation(initial_segmented_polydata, centerlines)
+        
+        return segmented_polydata, landmarks
 
 
+
+    '''
+    Find Spinal Canal landmarks
+    '''
+    def _landmarks(
+            geometry:          vtk.vtkPolyData         = None,
+            center:            np.array                = None,
+            size:              SpineLib.Size           = None,
+            orientation:       SpineLib.Orientation    = None,
+            threshold:         float                   = None,
+            ):
+        
+        landmarks = {}
+        
+        body_front = conv.get_intersection_points(geometry, center, (center + (orientation.a * size.depth)))
+        canal_center = body_front - orientation.a * threshold
+
+        left_geometry                       = conv.clip_plane(geometry, canal_center, -orientation.r)
+        left_pedicle_intersection           = conv.cut_sphere(left_geometry, body_front, threshold)
+        left_pedicle_intersection_points    = numpy_support.vtk_to_numpy(left_pedicle_intersection.GetPoints().GetData())
+        left_pedicle_intersection_distances = np.linalg.norm(left_pedicle_intersection_points - canal_center, axis=1)
+        left_pedicle_medial_point           = left_pedicle_intersection_points[np.argmin(left_pedicle_intersection_distances)]
+        left_pedicle_com                    = np.mean(left_pedicle_intersection_points, axis=0)
+
+        right_geometry                      = conv.clip_plane(geometry, canal_center, orientation.r)
+        right_pedicle_intersection          = conv.cut_sphere(right_geometry, body_front, threshold)
+        right_pedicle_intersection_points   = numpy_support.vtk_to_numpy(right_pedicle_intersection.GetPoints().GetData())
+        right_pedicle_intersection_distances= np.linalg.norm(right_pedicle_intersection_points - canal_center, axis=1)
+        right_pedicle_medial_point          = right_pedicle_intersection_points[np.argmin(right_pedicle_intersection_distances)]
+        right_pedicle_com                   = np.mean(right_pedicle_intersection_points, axis=0)
+
+        landmarks['canal_center']           = canal_center
+        landmarks['body_front']             = body_front
+        landmarks['left_pedicle_medial']    = left_pedicle_medial_point
+        landmarks['right_pedicle_medial']   = right_pedicle_medial_point
+        landmarks['left_pedicle_com']       = left_pedicle_com
+        landmarks['right_pedicle_com']      = right_pedicle_com
+
+        return landmarks
+    
 
     '''
     Calculate orientation of the vertebra.
@@ -41,7 +122,7 @@ class ShapeDecomposition:
 
         landmark = conv.get_intersection_points(geometry, center, (center + (orientation.a * size.depth)))
         points = numpy_support.vtk_to_numpy(geometry.GetPoints().GetData())
-
+        
         distances = np.linalg.norm(points - landmark, axis=1)
         #distances = np.linalg.norm(points - center, axis=1)
 
@@ -90,7 +171,7 @@ class ShapeDecomposition:
             plt.scatter(x_vals[lowest_min_between_maxima], y_vals[lowest_min_between_maxima], marker='s', color='magenta', s=80, label='Pre-Max Minimum')
         plt.legend()
 
-        plt.show(block=False)
+        #plt.show(block=False)
         #plt.show()
             
         threshold = x_vals[lowest_min_between_maxima]
@@ -98,10 +179,134 @@ class ShapeDecomposition:
         # threshold = x_vals[downward_inflection_points[0]]
         plt.clf()
 
-        vertebral_body = conv.filter_point_ids(
-            geometry, condition=lambda vertex: distances[vertex] > threshold)
+        vertebral_body = conv.filter_point_ids(geometry, condition=lambda vertex: distances[vertex] > threshold)
+        processes = conv.filter_point_ids(geometry, condition=lambda vertex: distances[vertex] < threshold)
         
-        processes = conv.filter_point_ids(
-            geometry, condition=lambda vertex: distances[vertex] < threshold)
-
         return threshold, vertebral_body, processes
+    
+
+
+    def centerline(polydata, startPoint, endPoints):
+        
+        pointMarkup = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsFiducialNode', "Points")
+        pointMarkup.AddControlPoint(startPoint)
+        pointMarkup.AddControlPoint(endPoints)
+
+        extractLogic = ExtractCenterline.ExtractCenterlineLogic()
+        targetNumberOfPoints = 5000.0
+        decimationAggressiveness = 4 # I had to lower this to 3.5 in at least one case to get it to work, 4 is the default in the module
+        subdivideInputSurface = False
+        preprocessedPolyData = extractLogic.preprocess(polydata, targetNumberOfPoints, decimationAggressiveness, subdivideInputSurface)
+
+        # Extract the centerline
+        try:
+            centerlineCurveNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsCurveNode", "Centerline curve")
+            centerlineCurveNode.GetDisplayNode().SetTextScale(0.0)
+            centerlinePolyData, voronoiDiagramPolyData = extractLogic.extractCenterline(preprocessedPolyData, pointMarkup)
+            centerlinePropertiesTableNode = None
+            extractLogic.createCurveTreeFromCenterline(centerlinePolyData, centerlineCurveNode, centerlinePropertiesTableNode)
+        except:
+            print("Centerline extraction failed")
+
+        SpineLib.SlicerTools.removeNodes([pointMarkup])
+        return centerlineCurveNode
+    
+
+    def clustering(polydata, orientation, n_clusters=8):
+
+        ######################################### CLustering with k means ##############################################################
+        polydata_points = numpy_support.vtk_to_numpy(polydata.GetPoints().GetData())
+        kmeans = KMeans(n_clusters=n_clusters, random_state=0)
+        labels = kmeans.fit_predict(polydata_points)
+        cluster_points = {}
+        for label in range(n_clusters):
+            cluster_points[label] = [polydata_points[i] for i, l in enumerate(labels) if l == label]
+        cluster_centers = kmeans.cluster_centers_
+
+
+        ######################################### Find process clusters ################################################################
+        process_label_ids = {"TL": [], "ASL": [], "AIL": [], "S": [], "AIR": [], "ASR": [], "TR": []}
+
+        process_label_ids["TL"], tl_cluster_index = ShapeDecomposition.find_cluster_label_ids(labels, cluster_centers, cluster_centers, key=(lambda p: np.array(p).dot(orientation.r)))
+        process_label_ids["TR"], tr_cluster_index = ShapeDecomposition.find_cluster_label_ids(labels, cluster_centers, cluster_centers, key=(lambda p: np.array(p).dot(-orientation.r)))
+        process_label_ids["S"], s_cluster_index   = ShapeDecomposition.find_cluster_label_ids(labels, cluster_centers, cluster_centers, key=(lambda p: np.array(p).dot(orientation.a)))
+
+        # remaining clusters
+        re_cluster_centers = [element for i, element in enumerate(cluster_centers) if i not in [tl_cluster_index, tr_cluster_index, s_cluster_index]]
+        central_center = sorted(re_cluster_centers, key=(lambda p: np.array(p).dot(orientation.r)))[len(re_cluster_centers)//2]
+        central_cluster_index = np.where(np.all(cluster_centers == central_center, axis=1))[0][0]
+        re_cluster_centers = [element for i, element in enumerate(cluster_centers) if i not in [tl_cluster_index, tr_cluster_index, s_cluster_index, central_cluster_index]]
+
+        superior_clusters = sorted(re_cluster_centers, key=(lambda p: np.array(p).dot(orientation.s)), reverse=True)[:2]
+        inferior_clusters = sorted(re_cluster_centers, key=(lambda p: np.array(p).dot(-orientation.s)), reverse=True)[:2]
+
+        process_label_ids["ASL"], asl_cluster_index = ShapeDecomposition.find_cluster_label_ids(labels, cluster_centers, superior_clusters, key=(lambda p: np.array(p).dot(orientation.r)))
+        process_label_ids["ASR"], asr_cluster_index = ShapeDecomposition.find_cluster_label_ids(labels, cluster_centers, superior_clusters, key=(lambda p: np.array(p).dot(-orientation.r)))
+        process_label_ids["AIL"], ail_cluster_index = ShapeDecomposition.find_cluster_label_ids(labels, cluster_centers, inferior_clusters, key=(lambda p: np.array(p).dot(orientation.r)))
+        process_label_ids["AIR"], air_cluster_index = ShapeDecomposition.find_cluster_label_ids(labels, cluster_centers, inferior_clusters, key=(lambda p: np.array(p).dot(-orientation.r)))
+
+
+        ############################## Add label Scalar to polydata ####################################################################
+        new_labels = np.zeros(len(labels))
+        process_names = list(process_label_ids.keys())
+        for n in range(len(process_names)):
+            for i in process_label_ids[process_names[n]]:
+                new_labels[i] = n+1
+
+        vtk_labels = vtk.vtkFloatArray()
+        vtk_labels.SetNumberOfComponents(1)
+        vtk_labels.SetName("Segments")
+        for l in new_labels:
+            vtk_labels.InsertNextValue(l)
+
+        polydata.GetPointData().SetScalars(vtk_labels)
+
+
+        ######################### Find landmarks #################################################################################
+        process_points = {}
+        for name in process_label_ids.keys():
+            process_points[name] = [polydata_points[i] for i in process_label_ids[name]]
+
+        landmarks = {"TL": [], "ASL": [], "AIL": [], "S": [], "AIR": [], "ASR": [], "TR": []}
+        landmarks["ASL"] = sorted(process_points["ASL"], key=(lambda p: np.array(p).dot(np.average([orientation.s, -orientation.a, -orientation.r], axis=0))))[-1]
+        #landmarks["ASL"] = sorted(process_points["ASL"], key=(lambda p: np.array(p).dot(np.average([orientation.s], axis=0))))[-1]
+        landmarks["ASR"] = sorted(process_points["ASR"], key=(lambda p: np.array(p).dot(np.average([orientation.s, -orientation.a, orientation.r], axis=0))))[-1]
+        #landmarks["ASR"] = sorted(process_points["ASR"], key=(lambda p: np.array(p).dot(np.average([orientation.s], axis=0))))[-1]
+        landmarks["AIL"] = sorted(process_points["AIL"], key=(lambda p: np.array(p).dot(np.average([-orientation.s, -orientation.a, -orientation.r], axis=0))))[-1]
+        landmarks["AIR"] = sorted(process_points["AIR"], key=(lambda p: np.array(p).dot(np.average([-orientation.s, -orientation.a, orientation.r], axis=0))))[-1]
+        landmarks["S"]   = sorted(process_points["S"], key=(lambda p: np.array(p).dot(orientation.a)))[0]
+        landmarks["TL"]  = sorted(process_points["TL"], key=(lambda p: np.array(p).dot(orientation.r)))[0]
+        landmarks["TR"]  = sorted(process_points["TR"], key=(lambda p: np.array(p).dot(orientation.r)))[-1]
+
+        #return dijkstraPoints
+        return polydata, process_label_ids, process_points, landmarks
+    
+    def find_cluster_label_ids(labels, cluster_centers, sorting_cluster_centers, key):
+        cluster = sorted(sorting_cluster_centers, key=key)[0]
+        cluster_index = np.where(np.all(cluster_centers == cluster, axis=1))[0][0]
+        label_ids = [i for i, x in enumerate(labels) if x == cluster_index]
+        return label_ids, cluster_index
+    
+
+    def centerline_distance(centerline, point):
+        points = centerline.GetCurvePointsWorld()
+        points = numpy_support.vtk_to_numpy(points.GetData())
+        distances = np.linalg.norm(points - point, axis=1)
+        return np.min(distances)
+    
+    def centerline_segmentation(polydata, centerlines):
+        polydata_points = numpy_support.vtk_to_numpy(polydata.GetPoints().GetData())
+
+        vtk_labels = vtk.vtkFloatArray()
+        vtk_labels.SetNumberOfComponents(1)
+        vtk_labels.SetName("Centerline_Segments")
+
+        for point in polydata_points:
+            centerline_distances = {name: ShapeDecomposition.centerline_distance(centerlines[name], point) for name in centerlines.keys()}
+            closest_centerline = min(centerline_distances, key=centerline_distances.get)
+            l = list(centerlines.keys()).index(closest_centerline)
+            vtk_labels.InsertNextValue(l)
+
+        polydata.GetPointData().SetScalars(vtk_labels)
+
+        return polydata
