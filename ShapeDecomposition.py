@@ -11,7 +11,8 @@ from sklearn.cluster import KMeans
 import matplotlib
 #matplotlib.use('Qt5Agg')
 
-print(f'{os.getenv('matplotlibback')}')
+matplotlibBack = os.getenv('matplotlibback')
+print(f'matplotlibBack:{matplotlibBack}')
 
 matplotlib.use(os.getenv('matplotlibback'))
 import matplotlib.pyplot as plt
