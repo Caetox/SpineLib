@@ -12,9 +12,14 @@ import matplotlib
 #matplotlib.use('Qt5Agg')
 
 matplotlibBack = os.getenv('matplotlibback')
-print(f'matplotlibBack:{matplotlibBack}')
 
-matplotlib.use(os.getenv('matplotlibback'))
+if matplotlibBack == None:
+    print(f'matplotlibBack is probably not set. matplotlibBack={matplotlibBack}')
+else: 
+    print(f'matplotlibBack:{matplotlibBack}')
+    
+matplotlib.use(matplotlibBack)
+
 import matplotlib.pyplot as plt
 import SpineLib
 import slicer
