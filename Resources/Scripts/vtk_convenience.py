@@ -552,7 +552,7 @@ def pca_eigenvectors(points):
     Cov = np.cov(points.T)
     eigval, eigvect = np.linalg.eig(Cov.T)
 
-    return eigvect.T
+    return eigvect.T, eigval.T
 
 def voxelization(geometry: vtkPolyData, factor):
     bounds = geometry.GetBounds()

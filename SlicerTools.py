@@ -254,4 +254,3 @@ class SlicerTools:
         polydata = modelNode.GetPolyData()
         pointsData = polydata.GetPoints().GetData()
         return vtk_to_numpy(pointsData)
-
