@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import numpy as np
+import os
 import vtk
 import vtk_convenience as conv
 from vtk.util import numpy_support
@@ -9,14 +10,17 @@ from scipy.signal import find_peaks, argrelextrema
 from sklearn.cluster import KMeans
 import matplotlib
 #matplotlib.use('Qt5Agg')
-matplotlib.use("wxAgg")
+
+print(f'{os.getenv('matplotlibback')}')
+
+matplotlib.use(os.getenv('matplotlibback'))
 import matplotlib.pyplot as plt
 import SpineLib
 import slicer
 import ExtractCenterline
 
 
-class ShapeDecomposition:
+class ShapeDecomposition:   
 
     def __init__(self,
                  geometry:          vtk.vtkPolyData         = None,
