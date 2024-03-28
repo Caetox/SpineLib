@@ -1,34 +1,18 @@
 
-# required packages
-pip_modules = ['scipy',
-               'vtk',
-               'seaborn',
-               'pandas',
-               'scikit-image',
-               'scikit-learn',
-               'matplotlib',
-               'numpy',
-               'pyvista',
-               'wxPython',
-               'pyacvd'
-               ]
+import slicer
+import os
+import platform
+from slicer.util import pip_install
+
+if platform.system() == 'Windows':
+    requirements_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "requirements.txt")
+    requirements = open(requirements_path, 'r').read()
+    slicer.util.pip_install(requirements)
 
 # required extensions
 extensions = ['SlicerIGT',
               'SlicerVMTK',
               ]
-
-
-# install required pip packages
-import pip
-import logging
-for module_ in pip_modules:
-    try:
-        module_obj = __import__(module_)
-    except ImportError:
-        logging.info("{0} was not found.\n Attempting to install {0} . . ."
-                     .format(module_))
-        pip.main(['install', module_])
 
 # install required extensions
 import slicer
