@@ -40,7 +40,10 @@ from vtk import (
     vtkPoints,
     vtkPointSet,
     vtkAxisActor,
-    mutable
+    vtkDijkstraGraphGeodesicPath,
+    vtkAppendFilter,
+    vtkPointLocator,
+    mutable,
 )
 from numpy import zeros, array, dot, ndarray
 from numpy.linalg import norm
@@ -505,15 +508,13 @@ def get_intersection_points(polydata, point1, point2):
 
     # Check for intersection between the line segment and the model
     intersect = locator.IntersectWithLine(point1, point2, 0.001, t, x, pcoords, subId)
-
-    # If intersection found, add the intersection point to the list
     if intersect:
         intersection_point = x
 
     return intersection_point
 
 def get_curve_intersection_points(model, curve_node):
-# Get model and curve objects
+    # Get model and curve objects
     curve = curve_node.GetCurvePointsWorld()
 
     # Create a locator for the model
@@ -540,8 +541,6 @@ def get_curve_intersection_points(model, curve_node):
 
         # Check for intersection between the line segment and the model
         intersect = locator.IntersectWithLine(point1, point2, 0.001, t, x, pcoords, subId)
-
-        # If intersection found, add the intersection point to the list
         if intersect:
             intersection_points.append(x)
 
@@ -561,4 +560,33 @@ def voxelization(geometry: vtkPolyData, factor):
     voxels = pv.voxelize(geometry, density=density)
     return voxels.points
 
-# test
+def runDijkstra(polydata, point1, point2):
+
+    points = vtkPoints()
+    
+    #create locator
+    pd = polydata
+    loc = vtkPointLocator()
+    loc.SetDataSet(polydata)
+    loc.BuildLocator()
+    closestPointId = loc.FindClosestPoint(point1)
+    closestPointId1 = loc.FindClosestPoint(point2)
+
+    appendFilter = vtkAppendFilter()
+    appendFilter.MergePointsOn()
+        
+    #create geodesic path: vtkDijkstraGraphGeodesicPath
+    dijkstra = vtkDijkstraGraphGeodesicPath()
+    dijkstra.SetInputData(pd)
+    dijkstra.SetStartVertex(closestPointId)
+    dijkstra.SetEndVertex(closestPointId1)
+    dijkstra.Update()
+                    
+    pts = dijkstra.GetOutput().GetPoints()
+
+    for i in range(pts.GetNumberOfPoints()):
+        p = [0,0,0]
+        pts.GetPoint(i,p)
+        points.InsertNextPoint(p)
+    
+    return points
