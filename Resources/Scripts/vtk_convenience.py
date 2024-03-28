@@ -43,6 +43,7 @@ from vtk import (
     vtkDijkstraGraphGeodesicPath,
     vtkAppendFilter,
     vtkPointLocator,
+    vtkMath,
     mutable,
 )
 from numpy import zeros, array, dot, ndarray
@@ -590,3 +591,21 @@ def runDijkstra(polydata, point1, point2):
         points.InsertNextPoint(p)
     
     return points
+
+
+def calcSagittalAngles(vectors):
+
+    angles = []
+    for index in range(0,len(vectors)-1):
+        v1 = np.array(vectors[index])
+        v2 = np.array(vectors[index+1])
+        v1[0] = 0.0
+        v2[0] = 0.0
+        crossProduct = np.cross(v1, v2)
+        dotProduct = np.dot(crossProduct, [-1.0, 0.0, 0.0])
+        angleRad = vtkMath.AngleBetweenVectors(v1, v2)
+        if (dotProduct >= 0): angleRad = np.negative(angleRad)
+        angleDeg = np.round(vtkMath.DegreesFromRadians(angleRad),2)
+        angles.append(angleDeg)
+
+    return angles
