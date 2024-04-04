@@ -35,9 +35,9 @@ class ShapeDecomposition:
                  orientation:       SpineLib.Orientation    = None,
                  ) -> None:
         
-        self.threshold, self.body, self.processes = ShapeDecomposition._pdf_decomposition(geometry, center, size, orientation)
-        self.landmarks = ShapeDecomposition._landmarks(geometry, center, size, orientation, self.threshold)
-        self.segmented_processes, self.process_landmarks = ShapeDecomposition._segment_processes(self.processes, self.landmarks, center, size, orientation)
+        self.threshold, self.body, self.processes        = ShapeDecomposition._pdf_decomposition(geometry, center, size, orientation)
+        self.landmarks                                   = ShapeDecomposition._landmarks(geometry, center, size, orientation, self.threshold)
+        self.segmented_processes, self.process_landmarks = ShapeDecomposition._segment_processes(self.processes, self.landmarks, orientation)
 
     '''
     Segment the processes of the vertebra
@@ -45,8 +45,6 @@ class ShapeDecomposition:
     def _segment_processes(
             processes:         vtk.vtkPolyData         = None,
             landmarks:         Dict                    = None,
-            center:            np.array                = None,
-            size:              SpineLib.Size           = None,
             orientation:       SpineLib.Orientation    = None,
             ):
         
@@ -134,7 +132,6 @@ class ShapeDecomposition:
         points = numpy_support.vtk_to_numpy(geometry.GetPoints().GetData())
         
         distances = np.linalg.norm(points - landmark, axis=1)
-        #distances = np.linalg.norm(points - center, axis=1)
 
         # Calculate the KDE
         kde = sns.kdeplot(distances, color='skyblue', legend=False)
@@ -192,6 +189,11 @@ class ShapeDecomposition:
         vertebral_body = conv.filter_point_ids(geometry, condition=lambda vertex: distances[vertex] > threshold)
         processes = conv.filter_point_ids(geometry, condition=lambda vertex: distances[vertex] < threshold)
         
+        # # plot
+        # narray = np.column_stack((x_vals, y_vals))
+        # chart_node = slicer.util.plot(narray, xColumnIndex=0, title="PDF")
+        # slicer.app.processEvents()
+
         return threshold, vertebral_body, processes
     
 
@@ -255,6 +257,8 @@ class ShapeDecomposition:
         process_label_ids["AIL"], ail_cluster_index = ShapeDecomposition.find_cluster_label_ids(labels, cluster_centers, inferior_clusters, key=(lambda p: np.array(p).dot(orientation.r)))
         process_label_ids["AIR"], air_cluster_index = ShapeDecomposition.find_cluster_label_ids(labels, cluster_centers, inferior_clusters, key=(lambda p: np.array(p).dot(-orientation.r)))
 
+        process_polydata = conv.filter_point_ids(polydata, condition=lambda vertex: labels[vertex] != asl_cluster_index)
+        SpineLib.SlicerTools.createModelNode(process_polydata, "ASL", color=[1, 0, 0])
 
         ############################## Add label Scalar to polydata ####################################################################
         new_labels = np.zeros(len(labels))
