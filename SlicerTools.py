@@ -5,6 +5,8 @@ import os
 from dataclasses import dataclass
 from slicer.util import loadModel
 from vtk.util.numpy_support import vtk_to_numpy
+from vtk.util.numpy_support import numpy_to_vtk
+
 import vtk_convenience as conv
 import SpineLib
 
@@ -254,3 +256,30 @@ class SlicerTools:
         polydata = modelNode.GetPolyData()
         pointsData = polydata.GetPoints().GetData()
         return vtk_to_numpy(pointsData)
+
+    
+    '''
+    Add a model containing vtkGlyph3D objects that represent a point cloud 
+    Return pointCloudModelNode
+    '''
+    def drawPointCloudFromNumpyArray(points, radius=1.5):
+        
+        vtk_points = vtk.vtkPoints()
+        vtk_points.SetData(numpy_to_vtk(points))
+
+        # Create the vtkPolyData object.
+        polydata = vtk.vtkPolyData()
+        polydata.SetPoints(vtk_points)
+
+        # Create the vtkSphereSource object.
+        sphere = vtk.vtkSphereSource()
+        sphere.SetRadius(radius)
+
+        # Create the vtkGlyph3D object.
+        glyph = vtk.vtkGlyph3D()
+        glyph.SetInputData(polydata)
+        glyph.SetSourceConnection(sphere.GetOutputPort())
+
+
+        pointCloudModelNode = slicer.modules.models.logic().AddModel(glyph.GetOutputPort())
+        return pointCloudModelNode
