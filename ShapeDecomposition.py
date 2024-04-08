@@ -37,7 +37,7 @@ class ShapeDecomposition:
         
         self.threshold, self.body, self.processes        = ShapeDecomposition._pdf_decomposition(geometry, center, size, orientation)
         self.landmarks                                   = ShapeDecomposition._landmarks(geometry, center, size, orientation, self.threshold)
-        self.segmented_processes, self.process_landmarks = ShapeDecomposition._segment_processes(self.processes, self.landmarks, orientation)
+        self.segmented_processes, self.process_polydata, self.process_landmarks = ShapeDecomposition._segment_processes(self.processes, self.landmarks, orientation)
 
     '''
     Segment the processes of the vertebra
@@ -55,24 +55,28 @@ class ShapeDecomposition:
         sampledPoints = numpy_support.vtk_to_numpy(sampledPoints.GetData())
         canalPoints = [sampledPoints[i] for i in range(0, len(sampledPoints), len(sampledPoints)//4)]
         process_endpoints = {"TL":  left_pedicle_medial,
-                                "ASL": canalPoints[0],
-                                "AIL": canalPoints[1],
-                                "S":   canalPoints[2],
-                                "AIR": canalPoints[3],
-                                "ASR": canalPoints[4],
-                                "TR":  right_pedicle_medial}
+                             "ASL": canalPoints[0],
+                             "AIL": canalPoints[1],
+                             "S":   canalPoints[2],
+                             "AIR": canalPoints[3],
+                             "ASR": canalPoints[4],
+                             "TR":  right_pedicle_medial}
         
         # segmentation of processes
-        initial_segmented_polydata, process_label_ids, process_points, landmarks = ShapeDecomposition.clustering(processes, orientation, n_clusters=8)
+        initial_segmented_polydata, process_polydata, process_label_ids, process_points, landmarks = ShapeDecomposition.clustering(processes, orientation, n_clusters=8)
 
+        landmark_marup = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsFiducialNode', "Landmarks")
+        landmark_marup.GetDisplayNode().SetTextScale(0.0)
         # centerlines
         centerlines = {"TL": [], "ASL": [], "AIL": [], "S": [], "AIR": [], "ASR": [], "TR": []}
         for name, point in landmarks.items():
             centerlines[name] = ShapeDecomposition.centerline(processes, point, process_endpoints[name])
+            landmark_marup.AddControlPoint(point)
 
-        segmented_polydata = ShapeDecomposition.centerline_segmentation(initial_segmented_polydata, centerlines)
+
+        segmented_polydata, process_polydata = ShapeDecomposition.centerline_segmentation(initial_segmented_polydata, centerlines)
         
-        return segmented_polydata, landmarks
+        return segmented_polydata, process_polydata, landmarks
 
 
 
@@ -257,8 +261,6 @@ class ShapeDecomposition:
         process_label_ids["AIL"], ail_cluster_index = ShapeDecomposition.find_cluster_label_ids(labels, cluster_centers, inferior_clusters, key=(lambda p: np.array(p).dot(orientation.r)))
         process_label_ids["AIR"], air_cluster_index = ShapeDecomposition.find_cluster_label_ids(labels, cluster_centers, inferior_clusters, key=(lambda p: np.array(p).dot(-orientation.r)))
 
-        process_polydata = conv.filter_point_ids(polydata, condition=lambda vertex: labels[vertex] != asl_cluster_index)
-        SpineLib.SlicerTools.createModelNode(process_polydata, "ASL", color=[1, 0, 0])
 
         ############################## Add label Scalar to polydata ####################################################################
         new_labels = np.zeros(len(labels))
@@ -275,6 +277,10 @@ class ShapeDecomposition:
 
         polydata.GetPointData().SetScalars(vtk_labels)
 
+        ############################# Filter polydata ###########################################################################
+        process_polydatas = {}
+        for name in process_label_ids.keys():
+            process_polydatas[name] = conv.filter_point_ids(polydata, condition=lambda vertex: vertex not in process_label_ids[name])
 
         ######################### Find landmarks #################################################################################
         process_points = {}
@@ -292,9 +298,9 @@ class ShapeDecomposition:
         landmarks["TL"]  = sorted(process_points["TL"], key=(lambda p: np.array(p).dot(orientation.r)))[0]
         landmarks["TR"]  = sorted(process_points["TR"], key=(lambda p: np.array(p).dot(orientation.r)))[-1]
 
-        #return dijkstraPoints
-        return polydata, process_label_ids, process_points, landmarks
+        return polydata, process_polydatas, process_label_ids, process_points, landmarks
     
+
     def find_cluster_label_ids(labels, cluster_centers, sorting_cluster_centers, key):
         cluster = sorted(sorting_cluster_centers, key=key)[0]
         cluster_index = np.where(np.all(cluster_centers == cluster, axis=1))[0][0]
@@ -307,6 +313,7 @@ class ShapeDecomposition:
         points = numpy_support.vtk_to_numpy(points.GetData())
         distances = np.linalg.norm(points - point, axis=1)
         return np.min(distances)
+    
     
     def centerline_segmentation(polydata, centerlines):
         polydata_points = numpy_support.vtk_to_numpy(polydata.GetPoints().GetData())
@@ -323,4 +330,9 @@ class ShapeDecomposition:
 
         polydata.GetPointData().SetScalars(vtk_labels)
 
-        return polydata
+        # filter polydatas
+        ids = {name: [i for i in range(polydata.GetNumberOfPoints()) if polydata.GetPointData().GetScalars().GetValue(i) != list(centerlines.keys()).index(name)] for name in centerlines.keys()}
+        process_polydatas = {name: conv.filter_point_ids(polydata, condition=lambda vertex: vertex in ids[name]) for name in centerlines.keys()}
+                                    
+
+        return polydata, process_polydatas
