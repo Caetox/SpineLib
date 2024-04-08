@@ -159,8 +159,8 @@ class Vertebra:
     '''
     def get_shape_decomposition(self) -> SpineLib.ShapeDecomposition:
 
-        shapeDecomposition = SpineLib.ShapeDecomposition(geometry=self.geometry, center=self.center, size=self.size, orientation=self.orientation)
-        return shapeDecomposition
+        self.shapeDecomposition = SpineLib.ShapeDecomposition(geometry=self.geometry, center=self.center, size=self.size, orientation=self.orientation)
+        return self.shapeDecomposition
 
     # '''
     # Compute ligament landmarks
