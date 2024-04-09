@@ -8,7 +8,11 @@ if platform.system() == 'Windows':
     requirements_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "requirements.txt")
     requirements = open(requirements_path, 'r').read()
     slicer.util.pip_install(requirements)
-    slicer.util.pip_install('wxPython')
+    if os.getenv('matplotlibback') is None:
+        print('Installing matplotlib backend wxAgg')
+        slicer.util.pip_install('wxPython')
+        print('Setting matplotlib backend to wxAgg')
+        os.environ['matplotlibback'] = 'wxAgg'
 
 # required extensions
 extensions = ['SlicerIGT',

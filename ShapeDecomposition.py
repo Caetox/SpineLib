@@ -15,7 +15,6 @@ matplotlibBack = os.getenv('matplotlibback')
 
 if matplotlibBack == None:
     print(f'matplotlibBack is probably not set. matplotlibBack={matplotlibBack}')
-    matplotlib.use("WxAgg")
 else: 
     print(f'matplotlibBack:{matplotlibBack}')
     
