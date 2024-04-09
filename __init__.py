@@ -8,6 +8,7 @@ if platform.system() == 'Windows':
     requirements_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "requirements.txt")
     requirements = open(requirements_path, 'r').read()
     slicer.util.pip_install(requirements)
+    slicer.util.pip_install('wxPython')
 
 # required extensions
 extensions = ['SlicerIGT',

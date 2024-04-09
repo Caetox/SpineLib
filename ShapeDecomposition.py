@@ -15,6 +15,7 @@ matplotlibBack = os.getenv('matplotlibback')
 
 if matplotlibBack == None:
     print(f'matplotlibBack is probably not set. matplotlibBack={matplotlibBack}')
+    matplotlib.use("WxAgg")
 else: 
     print(f'matplotlibBack:{matplotlibBack}')
     
@@ -50,6 +51,12 @@ class ShapeDecomposition:
         
         left_pedicle_medial = landmarks["left_pedicle_medial"]
         right_pedicle_medial = landmarks["right_pedicle_medial"]
+        # markup_test = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsFiducialNode', "Test")
+        # markup_test.GetDisplayNode().SetTextScale(0.0)
+        # markup_test.GetDisplayNode().SetSelectedColor(0, 0, 1)
+        # markup_test.AddControlPoint(left_pedicle_medial)
+        # markup_test.AddControlPoint(right_pedicle_medial)
+
         curve = ShapeDecomposition.centerline(processes, left_pedicle_medial, right_pedicle_medial)
         sampledPoints = curve.GetCurvePointsWorld()
         sampledPoints = numpy_support.vtk_to_numpy(sampledPoints.GetData())
@@ -174,6 +181,7 @@ class ShapeDecomposition:
         
             
         # Highlight inflection, minima, and maxima points on the plot with different colors
+        plt.ioff()
         plt.scatter(x_vals[downward_inflection_points], y_vals[downward_inflection_points], color='red', marker='o', label='Downward Inflection Points')
         plt.scatter(x_vals[upward_inflection_points], y_vals[upward_inflection_points], color='blue', marker='x', label='Upward Inflection Points')
         plt.scatter(x_vals[minima_points], y_vals[minima_points], color='orange', marker='o', label='Minima Points')
@@ -218,6 +226,7 @@ class ShapeDecomposition:
         try:
             centerlineCurveNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsCurveNode", "Centerline curve")
             centerlineCurveNode.GetDisplayNode().SetTextScale(0.0)
+            centerlineCurveNode.GetDisplayNode().SetOpacity(0.0)
             centerlinePolyData, voronoiDiagramPolyData = extractLogic.extractCenterline(preprocessedPolyData, pointMarkup)
             centerlinePropertiesTableNode = None
             extractLogic.createCurveTreeFromCenterline(centerlinePolyData, centerlineCurveNode, centerlinePropertiesTableNode)
@@ -288,12 +297,14 @@ class ShapeDecomposition:
             process_points[name] = [polydata_points[i] for i in process_label_ids[name]]
 
         landmarks = {"TL": [], "ASL": [], "AIL": [], "S": [], "AIR": [], "ASR": [], "TR": []}
-        landmarks["ASL"] = sorted(process_points["ASL"], key=(lambda p: np.array(p).dot(np.average([orientation.s, -orientation.a, -orientation.r], axis=0))))[-1]
-        #landmarks["ASL"] = sorted(process_points["ASL"], key=(lambda p: np.array(p).dot(np.average([orientation.s], axis=0))))[-1]
-        landmarks["ASR"] = sorted(process_points["ASR"], key=(lambda p: np.array(p).dot(np.average([orientation.s, -orientation.a, orientation.r], axis=0))))[-1]
-        #landmarks["ASR"] = sorted(process_points["ASR"], key=(lambda p: np.array(p).dot(np.average([orientation.s], axis=0))))[-1]
-        landmarks["AIL"] = sorted(process_points["AIL"], key=(lambda p: np.array(p).dot(np.average([-orientation.s, -orientation.a, -orientation.r], axis=0))))[-1]
-        landmarks["AIR"] = sorted(process_points["AIR"], key=(lambda p: np.array(p).dot(np.average([-orientation.s, -orientation.a, orientation.r], axis=0))))[-1]
+        #landmarks["ASL"] = sorted(process_points["ASL"], key=(lambda p: np.array(p).dot(np.average([orientation.s, -orientation.a, -orientation.r], axis=0))))[-1]
+        landmarks["ASL"] = sorted(process_points["ASL"], key=(lambda p: np.array(p).dot(np.average([orientation.s], axis=0))))[-1]
+        #landmarks["ASR"] = sorted(process_points["ASR"], key=(lambda p: np.array(p).dot(np.average([orientation.s, -orientation.a, orientation.r], axis=0))))[-1]
+        landmarks["ASR"] = sorted(process_points["ASR"], key=(lambda p: np.array(p).dot(np.average([orientation.s], axis=0))))[-1]
+        #landmarks["AIL"] = sorted(process_points["AIL"], key=(lambda p: np.array(p).dot(np.average([-orientation.s, -orientation.a, -orientation.r], axis=0))))[-1]
+        landmarks["AIL"] = sorted(process_points["AIL"], key=(lambda p: np.array(p).dot(np.average([orientation.s], axis=0))))[0]
+        #landmarks["AIR"] = sorted(process_points["AIR"], key=(lambda p: np.array(p).dot(np.average([-orientation.s, -orientation.a, orientation.r], axis=0))))[-1]
+        landmarks["AIR"] = sorted(process_points["AIR"], key=(lambda p: np.array(p).dot(np.average([orientation.s], axis=0))))[0]
         landmarks["S"]   = sorted(process_points["S"], key=(lambda p: np.array(p).dot(orientation.a)))[0]
         landmarks["TL"]  = sorted(process_points["TL"], key=(lambda p: np.array(p).dot(orientation.r)))[0]
         landmarks["TR"]  = sorted(process_points["TR"], key=(lambda p: np.array(p).dot(orientation.r)))[-1]
