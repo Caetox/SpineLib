@@ -257,7 +257,7 @@ class ShapeDecomposition:
 
         # remaining clusters
         re_cluster_centers = [element for i, element in enumerate(cluster_centers) if i not in [tl_cluster_index, tr_cluster_index, s_cluster_index]]
-        central_center = sorted(re_cluster_centers, key=(lambda p: np.array(p).dot(orientation.r)))[len(re_cluster_centers)//2]
+        central_center = sorted(re_cluster_centers, key=(lambda p: np.array(p).dot(orientation.s)))[len(re_cluster_centers)//2]
         central_cluster_index = np.where(np.all(cluster_centers == central_center, axis=1))[0][0]
         re_cluster_centers = [element for i, element in enumerate(cluster_centers) if i not in [tl_cluster_index, tr_cluster_index, s_cluster_index, central_cluster_index]]
 
