@@ -44,6 +44,7 @@ from vtk import (
     vtkAppendFilter,
     vtkPointLocator,
     vtkMath,
+    vtkPolyDataConnectivityFilter,
     mutable,
 )
 from numpy import zeros, array, dot, ndarray
@@ -609,3 +610,12 @@ def calcSagittalAngles(vectors):
         angles.append(angleDeg)
 
     return angles
+
+def filterLargestRegion(polydata):
+
+    connectivity_filter = vtkPolyDataConnectivityFilter()
+    connectivity_filter.SetInputData(polydata)
+    connectivity_filter.SetExtractionModeToLargestRegion()
+    connectivity_filter.Update()
+
+    return connectivity_filter.GetOutput()
