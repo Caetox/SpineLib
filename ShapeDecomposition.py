@@ -225,7 +225,7 @@ class ShapeDecomposition:
         try:
             centerlineCurveNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsCurveNode", "Centerline curve")
             centerlineCurveNode.GetDisplayNode().SetTextScale(0.0)
-            centerlineCurveNode.GetDisplayNode().SetOpacity(0.0)
+            centerlineCurveNode.GetDisplayNode().SetVisibility(0)
             centerlinePolyData, voronoiDiagramPolyData = extractLogic.extractCenterline(preprocessedPolyData, pointMarkup)
             centerlinePropertiesTableNode = None
             extractLogic.createCurveTreeFromCenterline(centerlinePolyData, centerlineCurveNode, centerlinePropertiesTableNode)
