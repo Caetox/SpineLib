@@ -39,13 +39,8 @@ class VertebralBody:
         endplate = conv.eliminate_misaligned_faces(
             polydata=body, center=center, direction=direction, max_angle=max_angle
         )
-
         # filter with connectivity filter to remove outliers (only the largest connected region remains)
-        connectivity_filter = vtk.vtkPolyDataConnectivityFilter()
-        connectivity_filter.SetInputData(endplate)
-        connectivity_filter.SetExtractionModeToLargestRegion()
-        connectivity_filter.Update()
-        endplate = connectivity_filter.GetOutput()
+        endplate = conv.filterLargestRegion(endplate)
 
         return endplate
     
