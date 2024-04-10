@@ -473,12 +473,18 @@ def make_algorithm_actor(algorithm: vtkAlgorithm, **properties):
     return _make_actor("SetInputConnection", algorithm.GetOutputPort(), **properties)
 
 
-def calc_main_component(geometry: vtkPolyData):
+def calc_main_component(geometry):
     """
     Return the main component of singular value decomposition through
-    all vertices of a vtkPolyData object.
+    all vertices of a vtkPolyData object or a list of points.
     """
-    points = list(iter_points(geometry))
+    if isinstance(geometry, vtkPolyData):
+        points = list(iter_points(geometry))
+    elif isinstance(geometry, list):
+        points = geometry
+    else:
+        raise ValueError("Input geometry must be either vtkPolyData or a list of points")
+
     points = np.array(points)
     mean = points.mean(axis=0)
     _1, _2, eigenvector = np.linalg.svd(points - mean)
@@ -486,8 +492,16 @@ def calc_main_component(geometry: vtkPolyData):
     return eigenvector[0]
 
 
-def sorted_points(polydata, main_axis):
-    points = [polydata.GetPoint(id_) for id_ in range(polydata.GetNumberOfPoints())]
+def sorted_points(geometry, main_axis):
+    """
+    Sort points of a vtkPolyData object or a list of points along a specified main axis.
+    """
+    if isinstance(geometry, vtkPolyData):
+        points = [geometry.GetPoint(id_) for id_ in range(geometry.GetNumberOfPoints())]
+    elif isinstance(geometry, list):
+        points = geometry
+    else:
+        raise ValueError("Input geometry must be either vtkPolyData or a list of points")
 
     main_axis = np.array(main_axis)
     projection = lambda p: np.array(p).dot(main_axis)
