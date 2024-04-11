@@ -257,6 +257,30 @@ def clip_plane(
     return clip.GetOutput()
 
 
+def clip_sphere(
+    polydata: vtkPolyData, sphere_origin: Tuple3Float, sphere_radius: Tuple3Float, InsideOut = False
+) -> vtkPolyData:
+    """
+    Return geometry "polydata" with all points below the plane removed.
+
+    Keyword Arguments:
+    polydata - vtk geometry to be clipped
+    plane_origin - some point on the clipping plane
+    plane_normal - orientation of the plane and direction on where vertices
+    will be removed
+    """
+    sphere = vtkSphere()
+    sphere.SetCenter(sphere_origin)
+    sphere.SetRadius(sphere_radius)
+
+    clip = vtkClipPolyData()
+    clip.SetInputData(polydata)
+    clip.SetClipFunction(sphere)
+    clip.SetInsideOut(InsideOut)
+    clip.Update()
+    return clip.GetOutput()
+
+
 def composite_center(polydatas: List[vtkPolyData]):
     all_points = vtkPoints()
     for poly in polydatas:
@@ -562,12 +586,14 @@ def get_curve_intersection_points(model, curve_node):
 
     return intersection_points
 
+
 def pca_eigenvectors(points):
     # Compute the covariance matrix and principal components without centering
     Cov = np.cov(points.T)
     eigval, eigvect = np.linalg.eig(Cov.T)
 
     return eigvect.T, eigval.T
+
 
 def voxelization(geometry: vtkPolyData, factor):
     bounds = geometry.GetBounds()
@@ -576,24 +602,31 @@ def voxelization(geometry: vtkPolyData, factor):
     voxels = pv.voxelize(geometry, density=density)
     return voxels.points
 
+
+def find_closest_point_id(polydata, point):
+    # Create a locator for the model
+    locator = vtkCellLocator()
+    locator.SetDataSet(polydata)
+    locator.BuildLocator()
+
+    # Find the closest point on the model
+    closestPointId = locator.FindClosestPoint(point)
+
+    return closestPointId
+
+
 def runDijkstra(polydata, point1, point2):
 
     points = vtkPoints()
-    
-    #create locator
-    pd = polydata
-    loc = vtkPointLocator()
-    loc.SetDataSet(polydata)
-    loc.BuildLocator()
-    closestPointId = loc.FindClosestPoint(point1)
-    closestPointId1 = loc.FindClosestPoint(point2)
+    closestPointId = find_closest_point_id(polydata, point1)
+    closestPointId1 = find_closest_point_id(polydata, point2)
 
     appendFilter = vtkAppendFilter()
     appendFilter.MergePointsOn()
         
     #create geodesic path: vtkDijkstraGraphGeodesicPath
     dijkstra = vtkDijkstraGraphGeodesicPath()
-    dijkstra.SetInputData(pd)
+    dijkstra.SetInputData(polydata)
     dijkstra.SetStartVertex(closestPointId)
     dijkstra.SetEndVertex(closestPointId1)
     dijkstra.Update()

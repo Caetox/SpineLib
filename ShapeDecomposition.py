@@ -12,12 +12,10 @@ import matplotlib
 #matplotlib.use('Qt5Agg')
 
 matplotlibBack = os.getenv('matplotlibback')
-
 if matplotlibBack == None:
     print(f'matplotlibBack is probably not set. matplotlibBack={matplotlibBack}')
 else: 
     print(f'matplotlibBack:{matplotlibBack}')
-    
 matplotlib.use(matplotlibBack)
 
 import matplotlib.pyplot as plt
@@ -37,94 +35,8 @@ class ShapeDecomposition:
         
         self.threshold, self.body, self.processes        = ShapeDecomposition._pdf_decomposition(geometry, center, size, orientation)
         self.landmarks                                   = ShapeDecomposition._landmarks(geometry, center, size, orientation, self.threshold)
-        self.segmented_processes, self.process_polydata, self.process_landmarks = ShapeDecomposition._segment_processes(self.processes, self.landmarks, orientation)
+        self.segmented_processes, self.process_polydata, self.process_landmarks = ShapeDecomposition._segment_processes(geometry, self.processes, self.landmarks, orientation)
 
-    '''
-    Segment the processes of the vertebra
-    '''
-    def _segment_processes(
-            processes:         vtk.vtkPolyData         = None,
-            landmarks:         Dict                    = None,
-            orientation:       SpineLib.Orientation    = None,
-            ):
-        
-        left_pedicle_medial = landmarks["left_pedicle_medial"]
-        right_pedicle_medial = landmarks["right_pedicle_medial"]
-        # markup_test = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsFiducialNode', "Test")
-        # markup_test.GetDisplayNode().SetTextScale(0.0)
-        # markup_test.GetDisplayNode().SetSelectedColor(0, 0, 1)
-        # markup_test.AddControlPoint(left_pedicle_medial)
-        # markup_test.AddControlPoint(right_pedicle_medial)
-
-        curve = ShapeDecomposition.centerline(processes, left_pedicle_medial, right_pedicle_medial)
-        sampledPoints = curve.GetCurvePointsWorld()
-        sampledPoints = numpy_support.vtk_to_numpy(sampledPoints.GetData())
-        canalPoints = [sampledPoints[i] for i in range(0, len(sampledPoints), len(sampledPoints)//4)]
-        process_endpoints = {"TL":  left_pedicle_medial,
-                             "ASL": canalPoints[0],
-                             "AIL": canalPoints[1],
-                             "S":   canalPoints[2],
-                             "AIR": canalPoints[3],
-                             "ASR": canalPoints[4],
-                             "TR":  right_pedicle_medial}
-        
-        # segmentation of processes
-        initial_segmented_polydata, process_polydata, process_label_ids, process_points, landmarks = ShapeDecomposition.clustering(processes, orientation, n_clusters=8)
-
-        landmark_marup = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsFiducialNode', "Landmarks")
-        landmark_marup.GetDisplayNode().SetTextScale(0.0)
-        # centerlines
-        centerlines = {"TL": [], "ASL": [], "AIL": [], "S": [], "AIR": [], "ASR": [], "TR": []}
-        for name, point in landmarks.items():
-            centerlines[name] = ShapeDecomposition.centerline(processes, point, process_endpoints[name])
-            landmark_marup.AddControlPoint(point)
-
-
-        segmented_polydata, process_polydata = ShapeDecomposition.centerline_segmentation(initial_segmented_polydata, centerlines)
-        
-        return segmented_polydata, process_polydata, landmarks
-
-
-
-    '''
-    Find Spinal Canal landmarks
-    '''
-    def _landmarks(
-            geometry:          vtk.vtkPolyData         = None,
-            center:            np.array                = None,
-            size:              SpineLib.Size           = None,
-            orientation:       SpineLib.Orientation    = None,
-            threshold:         float                   = None,
-            ):
-        
-        landmarks = {}
-        
-        body_front = conv.get_intersection_points(geometry, center, (center + (orientation.a * size.depth)))
-        canal_center = body_front - orientation.a * threshold
-
-        left_geometry                       = conv.clip_plane(geometry, canal_center, -orientation.r)
-        left_pedicle_intersection           = conv.cut_sphere(left_geometry, body_front, threshold)
-        left_pedicle_intersection_points    = numpy_support.vtk_to_numpy(left_pedicle_intersection.GetPoints().GetData())
-        left_pedicle_intersection_distances = np.linalg.norm(left_pedicle_intersection_points - canal_center, axis=1)
-        left_pedicle_medial_point           = left_pedicle_intersection_points[np.argmin(left_pedicle_intersection_distances)]
-        left_pedicle_com                    = np.mean(left_pedicle_intersection_points, axis=0)
-
-        right_geometry                      = conv.clip_plane(geometry, canal_center, orientation.r)
-        right_pedicle_intersection          = conv.cut_sphere(right_geometry, body_front, threshold)
-        right_pedicle_intersection_points   = numpy_support.vtk_to_numpy(right_pedicle_intersection.GetPoints().GetData())
-        right_pedicle_intersection_distances= np.linalg.norm(right_pedicle_intersection_points - canal_center, axis=1)
-        right_pedicle_medial_point          = right_pedicle_intersection_points[np.argmin(right_pedicle_intersection_distances)]
-        right_pedicle_com                   = np.mean(right_pedicle_intersection_points, axis=0)
-
-        landmarks['canal_center']           = canal_center
-        landmarks['body_front']             = body_front
-        landmarks['left_pedicle_medial']    = left_pedicle_medial_point
-        landmarks['right_pedicle_medial']   = right_pedicle_medial_point
-        landmarks['left_pedicle_com']       = left_pedicle_com
-        landmarks['right_pedicle_com']      = right_pedicle_com
-
-        return landmarks
-    
 
     '''
     Calculate orientation of the vertebra.
@@ -196,9 +108,14 @@ class ShapeDecomposition:
         # threshold = x_vals[minima_points[0]]
         # threshold = x_vals[downward_inflection_points[0]]
         plt.clf()
-
+        
+        # segment by filtering polydata
         vertebral_body = conv.filter_point_ids(geometry, condition=lambda vertex: distances[vertex] > threshold)
         processes = conv.filter_point_ids(geometry, condition=lambda vertex: distances[vertex] < threshold)
+
+        # # segment by clipping (problem: this adds vertices at the edges of the clipped faces, might trow off the clustering e.g.)
+        # vertebral_body = conv.clip_sphere(geometry, landmark, threshold, InsideOut=True)
+        # processes = conv.clip_sphere(geometry, landmark, threshold)
         
         # # plot
         # narray = np.column_stack((x_vals, y_vals))
@@ -209,31 +126,131 @@ class ShapeDecomposition:
     
 
 
-    def centerline(polydata, startPoint, endPoints):
+
+    '''
+    Find Spinal Canal landmarks
+    '''
+    def _landmarks(
+            geometry:          vtk.vtkPolyData         = None,
+            center:            np.array                = None,
+            size:              SpineLib.Size           = None,
+            orientation:       SpineLib.Orientation    = None,
+            threshold:         float                   = None,
+            ):
         
-        pointMarkup = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsFiducialNode', "Points")
-        pointMarkup.AddControlPoint(startPoint)
-        pointMarkup.AddControlPoint(endPoints)
+        landmarks = {}
+        
+        body_front = conv.get_intersection_points(geometry, center, (center + (orientation.a * size.depth)))
+        canal_center = body_front - orientation.a * threshold
 
-        extractLogic = ExtractCenterline.ExtractCenterlineLogic()
-        targetNumberOfPoints = 5000.0
-        decimationAggressiveness = 4 # I had to lower this to 3.5 in at least one case to get it to work, 4 is the default in the module
-        subdivideInputSurface = False
-        preprocessedPolyData = extractLogic.preprocess(polydata, targetNumberOfPoints, decimationAggressiveness, subdivideInputSurface)
+        left_geometry                       = conv.clip_plane(geometry, canal_center, -orientation.r)
+        left_pedicle_intersection           = conv.cut_sphere(left_geometry, body_front, threshold)
+        left_pedicle_intersection_points    = numpy_support.vtk_to_numpy(left_pedicle_intersection.GetPoints().GetData())
+        # left_pedicle_intersection_distances = np.linalg.norm(left_pedicle_intersection_points - canal_center, axis=1)
+        # left_pedicle_medial_point           = left_pedicle_intersection_points[np.argmin(left_pedicle_intersection_distances)]
+        # left_pedicle_lateral_point          = left_pedicle_intersection_points[np.argmax(left_pedicle_intersection_distances)]
+        sorted_left_pedicle_points          = conv.sorted_points(list(left_pedicle_intersection_points), -orientation.r)
+        left_pedicle_medial_point           = sorted_left_pedicle_points[0]
+        left_pedicle_lateral_point          = sorted_left_pedicle_points[-1]
+        left_pedicle_com                    = np.mean(left_pedicle_intersection_points, axis=0)
 
-        # Extract the centerline
-        try:
-            centerlineCurveNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsCurveNode", "Centerline curve")
-            centerlineCurveNode.GetDisplayNode().SetTextScale(0.0)
-            centerlineCurveNode.GetDisplayNode().SetVisibility(0)
-            centerlinePolyData, voronoiDiagramPolyData = extractLogic.extractCenterline(preprocessedPolyData, pointMarkup)
-            centerlinePropertiesTableNode = None
-            extractLogic.createCurveTreeFromCenterline(centerlinePolyData, centerlineCurveNode, centerlinePropertiesTableNode)
-        except:
-            print("Centerline extraction failed")
+        right_geometry                      = conv.clip_plane(geometry, canal_center, orientation.r)
+        right_pedicle_intersection          = conv.cut_sphere(right_geometry, body_front, threshold)
+        right_pedicle_intersection_points   = numpy_support.vtk_to_numpy(right_pedicle_intersection.GetPoints().GetData())
+        # right_pedicle_intersection_distances= np.linalg.norm(right_pedicle_intersection_points - canal_center, axis=1)
+        # right_pedicle_medial_point          = right_pedicle_intersection_points[np.argmin(right_pedicle_intersection_distances)]
+        # right_pedicle_lateral_point         = right_pedicle_intersection_points[np.argmax(right_pedicle_intersection_distances)]
+        sorted_right_pedicle_points         = conv.sorted_points(list(right_pedicle_intersection_points), orientation.r)
+        right_pedicle_medial_point          = sorted_right_pedicle_points[0]
+        right_pedicle_lateral_point         = sorted_right_pedicle_points[-1]
+        right_pedicle_com                   = np.mean(right_pedicle_intersection_points, axis=0)
 
-        SpineLib.SlicerTools.removeNodes([pointMarkup])
-        return centerlineCurveNode
+        landmarks['canal_center']           = canal_center
+        landmarks['body_front']             = body_front
+        landmarks['left_pedicle_medial']    = left_pedicle_medial_point
+        landmarks['right_pedicle_medial']   = right_pedicle_medial_point
+        landmarks['left_pedicle_lateral']   = left_pedicle_lateral_point
+        landmarks['right_pedicle_lateral']  = right_pedicle_lateral_point
+        landmarks['left_pedicle_com']       = left_pedicle_com
+        landmarks['right_pedicle_com']      = right_pedicle_com
+
+
+        return landmarks
+    
+
+    
+
+    '''
+    Segment the processes of the vertebra
+    '''
+    def _segment_processes(
+            geometry:          vtk.vtkPolyData         = None,
+            processes:         vtk.vtkPolyData         = None,
+            landmarks:         Dict                    = None,
+            orientation:       SpineLib.Orientation    = None,
+            ):
+        
+        
+        endpoint_lm_markup = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsFiducialNode', "Endpoints")
+        endpoint_lm_markup.GetDisplayNode().SetTextScale(0.0)
+        endpoint_lm_markup.GetDisplayNode().SetSelectedColor(0, 0, 1)
+        left_pedicle_medial = landmarks["left_pedicle_medial"]
+        right_pedicle_medial = landmarks["right_pedicle_medial"]
+        left_pedicle_lateral = landmarks["left_pedicle_lateral"]
+        right_pedicle_lateral = landmarks["right_pedicle_lateral"]
+        # find closest point on processes for left_pedicle_lateral
+        left_pedicle_lateral_points = numpy_support.vtk_to_numpy(processes.GetPoints().GetData())
+        left_pedicle_lateral_distances = np.linalg.norm(left_pedicle_lateral_points - left_pedicle_lateral, axis=1)
+        endpointLeftPedicle = left_pedicle_lateral_points[np.argmin(left_pedicle_lateral_distances)]
+        # find closest point on processes for right_pedicle_lateral
+        right_pedicle_lateral_points = numpy_support.vtk_to_numpy(processes.GetPoints().GetData())
+        right_pedicle_lateral_distances = np.linalg.norm(right_pedicle_lateral_points - right_pedicle_lateral, axis=1)
+        endpointRightPedicle = right_pedicle_lateral_points[np.argmin(right_pedicle_lateral_distances)]
+
+
+        # markup_test = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsFiducialNode', "Test")
+        # markup_test.GetDisplayNode().SetTextScale(0.0)
+        # markup_test.GetDisplayNode().SetSelectedColor(0, 0, 1)
+        # markup_test.AddControlPoint(left_pedicle_medial)
+        # markup_test.AddControlPoint(right_pedicle_medial)
+        endpoint_lm_markup.AddControlPoint(landmarks["left_pedicle_lateral"])
+        endpoint_lm_markup.AddControlPoint(landmarks["right_pedicle_lateral"])
+        endpoint_lm_markup.AddControlPoint(endpointLeftPedicle)
+        endpoint_lm_markup.AddControlPoint(endpointRightPedicle)
+
+        curve = ShapeDecomposition.centerline(processes, left_pedicle_medial, right_pedicle_medial)
+        sampledPoints = curve.GetCurvePointsWorld()
+        sampledPoints = numpy_support.vtk_to_numpy(sampledPoints.GetData())
+        canalPoints = [sampledPoints[i] for i in range(0, len(sampledPoints), len(sampledPoints)//6)]
+        process_endpoints = {"TL":  endpointLeftPedicle,
+                             "ASL": canalPoints[1],
+                             "AIL": canalPoints[2],
+                             "S":   canalPoints[3],
+                             "AIR": canalPoints[4],
+                             "ASR": canalPoints[5],
+                             "TR":  endpointRightPedicle}
+        
+        # segmentation of processes
+        initial_segmented_polydata, process_polydata, process_label_ids, process_points, landmarks = ShapeDecomposition.clustering(processes, orientation, n_clusters=8)
+
+        landmark_marup = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsFiducialNode', "Landmarks")
+        landmark_marup.GetDisplayNode().SetTextScale(0.0)
+
+        # centerlines
+        centerlines = {"TL": [], "ASL": [], "AIL": [], "S": [], "AIR": [], "ASR": [], "TR": []}
+        for name, point in landmarks.items():
+            centerlines[name] = ShapeDecomposition.centerline(geometry, point, process_endpoints[name])
+            landmark_marup.AddControlPoint(point)
+            #endpoint_lm_markup.AddControlPoint(process_endpoints[name])
+        
+        # TODO: for segmenting Lamina
+        # centerlines["Lamina"] = curve
+
+        segmented_polydata, process_polydata = ShapeDecomposition.centerline_segmentation(initial_segmented_polydata, centerlines)
+        
+        return segmented_polydata, process_polydata, landmarks
+
+    
     
 
     def clustering(polydata, orientation, n_clusters=8):
@@ -257,7 +274,7 @@ class ShapeDecomposition:
 
         # remaining clusters
         re_cluster_centers = [element for i, element in enumerate(cluster_centers) if i not in [tl_cluster_index, tr_cluster_index, s_cluster_index]]
-        central_center = sorted(re_cluster_centers, key=(lambda p: np.array(p).dot(orientation.s)))[len(re_cluster_centers)//2]
+        central_center = sorted(re_cluster_centers, key=(lambda p: np.array(p).dot(orientation.r)))[len(re_cluster_centers)//2]
         central_cluster_index = np.where(np.all(cluster_centers == central_center, axis=1))[0][0]
         re_cluster_centers = [element for i, element in enumerate(cluster_centers) if i not in [tl_cluster_index, tr_cluster_index, s_cluster_index, central_cluster_index]]
 
@@ -300,16 +317,30 @@ class ShapeDecomposition:
         landmarks["ASL"] = sorted(process_points["ASL"], key=(lambda p: np.array(p).dot(np.average([orientation.s], axis=0))))[-1]
         #landmarks["ASR"] = sorted(process_points["ASR"], key=(lambda p: np.array(p).dot(np.average([orientation.s, -orientation.a, orientation.r], axis=0))))[-1]
         landmarks["ASR"] = sorted(process_points["ASR"], key=(lambda p: np.array(p).dot(np.average([orientation.s], axis=0))))[-1]
-        #landmarks["AIL"] = sorted(process_points["AIL"], key=(lambda p: np.array(p).dot(np.average([-orientation.s, -orientation.a, -orientation.r], axis=0))))[-1]
-        landmarks["AIL"] = sorted(process_points["AIL"], key=(lambda p: np.array(p).dot(np.average([orientation.s], axis=0))))[0]
-        #landmarks["AIR"] = sorted(process_points["AIR"], key=(lambda p: np.array(p).dot(np.average([-orientation.s, -orientation.a, orientation.r], axis=0))))[-1]
-        landmarks["AIR"] = sorted(process_points["AIR"], key=(lambda p: np.array(p).dot(np.average([orientation.s], axis=0))))[0]
+        landmarks["AIL"] = sorted(process_points["AIL"], key=(lambda p: np.array(p).dot(np.average([-orientation.s, -orientation.a, -orientation.r], axis=0))))[-1]
+        #landmarks["AIL"] = sorted(process_points["AIL"], key=(lambda p: np.array(p).dot(np.average([orientation.s], axis=0))))[0]
+        landmarks["AIR"] = sorted(process_points["AIR"], key=(lambda p: np.array(p).dot(np.average([-orientation.s, -orientation.a, orientation.r], axis=0))))[-1]
+        #landmarks["AIR"] = sorted(process_points["AIR"], key=(lambda p: np.array(p).dot(np.average([orientation.s], axis=0))))[0]
         landmarks["S"]   = sorted(process_points["S"], key=(lambda p: np.array(p).dot(orientation.a)))[0]
         landmarks["TL"]  = sorted(process_points["TL"], key=(lambda p: np.array(p).dot(orientation.r)))[0]
         landmarks["TR"]  = sorted(process_points["TR"], key=(lambda p: np.array(p).dot(orientation.r)))[-1]
 
+
+        # test_landmarks = {}
+        # for name, points in process_points.items():
+        #     points = np.array(points)
+        #     mean = points.mean(axis=0)
+        #     _1, _2, eigenvector = np.linalg.svd(points - mean)
+        #     main_component = eigenvector[0]
+        #     main_component_line_markup = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsLineNode', f"{name}_main_component")
+        #     main_component_line_markup.SetLineStartPosition(mean)
+        #     main_component_line_markup.SetLineEndPosition(mean + 100*main_component)
+        #     #test_landmarks[name] = conv.cut_sphere(polydata, point, 2)
+
         return polydata, process_polydatas, process_label_ids, process_points, landmarks
     
+
+
 
     def find_cluster_label_ids(labels, cluster_centers, sorting_cluster_centers, key):
         cluster = sorted(sorting_cluster_centers, key=key)[0]
@@ -318,13 +349,8 @@ class ShapeDecomposition:
         return label_ids, cluster_index
     
 
-    def centerline_distance(centerline, point):
-        points = centerline.GetCurvePointsWorld()
-        points = numpy_support.vtk_to_numpy(points.GetData())
-        distances = np.linalg.norm(points - point, axis=1)
-        return np.min(distances)
-    
-    
+
+
     def centerline_segmentation(polydata, centerlines):
         polydata_points = numpy_support.vtk_to_numpy(polydata.GetPoints().GetData())
 
@@ -346,3 +372,49 @@ class ShapeDecomposition:
                                     
 
         return polydata, process_polydatas
+    
+
+
+    def centerline(polydata, startPoint, endPoints):
+        
+        pointMarkup = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsFiducialNode', "Points")
+        pointMarkup.GetDisplayNode().SetTextScale(0.0)
+        pointMarkup.GetDisplayNode().SetSelectedColor(0, 0, 1)
+        pointMarkup.AddControlPoint(startPoint)
+        pointMarkup.AddControlPoint(endPoints)
+
+        extractLogic = ExtractCenterline.ExtractCenterlineLogic()
+        targetNumberOfPoints = 5000.0
+        decimationAggressiveness = 4 # I had to lower this to 3.5 in at least one case to get it to work, 4 is the default in the module
+        subdivideInputSurface = False
+        preprocessedPolyData = extractLogic.preprocess(polydata, targetNumberOfPoints, decimationAggressiveness, subdivideInputSurface)
+
+        # Extract the centerline
+        try:
+            centerlineCurveNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsCurveNode", "Centerline curve")
+            centerlineCurveNode.GetDisplayNode().SetTextScale(0.0)
+            centerlinePolyData, voronoiDiagramPolyData = extractLogic.extractCenterline(preprocessedPolyData, pointMarkup)
+            centerlinePropertiesTableNode = None
+            extractLogic.createCurveTreeFromCenterline(centerlinePolyData, centerlineCurveNode, centerlinePropertiesTableNode)
+            #centerlineCurveNode.GetDisplayNode().SetVisibility(0)
+            # # resample curve
+            # #centerlineCurveNode.SetCurveTypeToPolynomial()
+            # resamplingNumber = 25
+            # sampleDist = centerlineCurveNode.GetCurveLengthWorld() / (resamplingNumber-1)
+            # centerlineCurveNode.ResampleCurveWorld(sampleDist)
+
+        except:
+            print("Centerline extraction failed")
+
+        SpineLib.SlicerTools.removeNodes([pointMarkup])
+        return centerlineCurveNode
+    
+
+
+    def centerline_distance(centerline, point):
+        points = centerline.GetCurvePointsWorld()
+        points = numpy_support.vtk_to_numpy(points.GetData())
+        distances = np.linalg.norm(points - point, axis=1)
+        return np.min(distances)
+    
+    
