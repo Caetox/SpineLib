@@ -189,62 +189,29 @@ class ShapeDecomposition:
             landmarks:         Dict                    = None,
             orientation:       SpineLib.Orientation    = None,
             ):
-        
-        
-        endpoint_lm_markup = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsFiducialNode', "Endpoints")
-        endpoint_lm_markup.GetDisplayNode().SetTextScale(0.0)
-        endpoint_lm_markup.GetDisplayNode().SetSelectedColor(0, 0, 1)
-        left_pedicle_medial = landmarks["left_pedicle_medial"]
-        right_pedicle_medial = landmarks["right_pedicle_medial"]
-        left_pedicle_lateral = landmarks["left_pedicle_lateral"]
-        right_pedicle_lateral = landmarks["right_pedicle_lateral"]
-        # find closest point on processes for left_pedicle_lateral
-        left_pedicle_lateral_points = numpy_support.vtk_to_numpy(processes.GetPoints().GetData())
-        left_pedicle_lateral_distances = np.linalg.norm(left_pedicle_lateral_points - left_pedicle_lateral, axis=1)
-        endpointLeftPedicle = left_pedicle_lateral_points[np.argmin(left_pedicle_lateral_distances)]
-        # find closest point on processes for right_pedicle_lateral
-        right_pedicle_lateral_points = numpy_support.vtk_to_numpy(processes.GetPoints().GetData())
-        right_pedicle_lateral_distances = np.linalg.norm(right_pedicle_lateral_points - right_pedicle_lateral, axis=1)
-        endpointRightPedicle = right_pedicle_lateral_points[np.argmin(right_pedicle_lateral_distances)]
 
-
-        # markup_test = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsFiducialNode', "Test")
-        # markup_test.GetDisplayNode().SetTextScale(0.0)
-        # markup_test.GetDisplayNode().SetSelectedColor(0, 0, 1)
-        # markup_test.AddControlPoint(left_pedicle_medial)
-        # markup_test.AddControlPoint(right_pedicle_medial)
-        endpoint_lm_markup.AddControlPoint(landmarks["left_pedicle_lateral"])
-        endpoint_lm_markup.AddControlPoint(landmarks["right_pedicle_lateral"])
-        endpoint_lm_markup.AddControlPoint(endpointLeftPedicle)
-        endpoint_lm_markup.AddControlPoint(endpointRightPedicle)
-
-        curve = ShapeDecomposition.centerline(processes, left_pedicle_medial, right_pedicle_medial)
-        sampledPoints = curve.GetCurvePointsWorld()
-        sampledPoints = numpy_support.vtk_to_numpy(sampledPoints.GetData())
-        canalPoints = [sampledPoints[i] for i in range(0, len(sampledPoints), len(sampledPoints)//6)]
-        process_endpoints = {"TL":  endpointLeftPedicle,
-                             "ASL": canalPoints[1],
-                             "AIL": canalPoints[2],
-                             "S":   canalPoints[3],
-                             "AIR": canalPoints[4],
-                             "ASR": canalPoints[5],
-                             "TR":  endpointRightPedicle}
+        centerline_lamina = ShapeDecomposition.centerline(processes, landmarks["left_pedicle_medial"], landmarks["right_pedicle_medial"])
+        centerline_lamina_points = centerline_lamina.GetCurvePointsWorld()
+        centerline_lamina_points = numpy_support.vtk_to_numpy(centerline_lamina_points.GetData())
+        centerline_lamina_samples = [centerline_lamina_points[i] for i in range(0, len(centerline_lamina_points), len(centerline_lamina_points)//6)]
+        process_endpoints = {"TL":  landmarks["left_pedicle_lateral"],
+                             "ASL": centerline_lamina_samples[1],
+                             "AIL": centerline_lamina_samples[2],
+                             "S":   centerline_lamina_samples[3],
+                             "AIR": centerline_lamina_samples[4],
+                             "ASR": centerline_lamina_samples[5],
+                             "TR":  landmarks["right_pedicle_lateral"]}
         
         # segmentation of processes
         initial_segmented_polydata, process_polydata, process_label_ids, process_points, landmarks = ShapeDecomposition.clustering(processes, orientation, n_clusters=8)
-
-        landmark_marup = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsFiducialNode', "Landmarks")
-        landmark_marup.GetDisplayNode().SetTextScale(0.0)
 
         # centerlines
         centerlines = {"TL": [], "ASL": [], "AIL": [], "S": [], "AIR": [], "ASR": [], "TR": []}
         for name, point in landmarks.items():
             centerlines[name] = ShapeDecomposition.centerline(geometry, point, process_endpoints[name])
-            landmark_marup.AddControlPoint(point)
-            #endpoint_lm_markup.AddControlPoint(process_endpoints[name])
         
-        # TODO: for segmenting Lamina
-        # centerlines["Lamina"] = curve
+        # # TODO: for segmenting Lamina
+        # centerlines["Lamina"] = centerline_lamina
 
         segmented_polydata, process_polydata = ShapeDecomposition.centerline_segmentation(initial_segmented_polydata, centerlines)
         
@@ -396,7 +363,7 @@ class ShapeDecomposition:
             centerlinePolyData, voronoiDiagramPolyData = extractLogic.extractCenterline(preprocessedPolyData, pointMarkup)
             centerlinePropertiesTableNode = None
             extractLogic.createCurveTreeFromCenterline(centerlinePolyData, centerlineCurveNode, centerlinePropertiesTableNode)
-            #centerlineCurveNode.GetDisplayNode().SetVisibility(0)
+            centerlineCurveNode.GetDisplayNode().SetVisibility(0)
             # # resample curve
             # #centerlineCurveNode.SetCurveTypeToPolynomial()
             # resamplingNumber = 25
