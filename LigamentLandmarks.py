@@ -213,9 +213,8 @@ class LigamentLandmarks:
             lower_spinous_curve.GetDisplayNode().SetSelectedColor(1, 0, 0)
             slicer.util.updateMarkupsControlPointsFromArray(lower_spinous_curve, np.array(sorted_lower_spinous))
 
-            # resamplingNumber = 8
-            # sampleDist = upper_spinous_curve.GetCurveLengthWorld() / (resamplingNumber-1)
-            # upper_spinous_curve.ResampleCurveWorld(sampleDist)
+            # resample curve
+            SpineLib.SlicerTools.resampleCurve(upper_spinous_curve, 8)
 
             # Compute best fit plane
             points = vtk.vtkPoints()
@@ -232,47 +231,10 @@ class LigamentLandmarks:
             planeNode.GetDisplayNode().SetOpacity(0.5)
             planeNode.GetDisplayNode().SetHandlesInteractive(False)
 
+            # find closest points on polydata to the curve
 
 
 
-            # # Create a vtkPoints object to hold the points
-            # points = vtk.vtkPoints()
-
-            # # Add the points to the vtkPoints object
-            # for point in upper_spinous_points:
-            #     points.InsertNextPoint(point)
-
-            # # Fit a polynomial spline to the points
-            # spline = vtk.vtkCardinalSpline()
-            # spline.SetLeftConstraint(2)  # Free slope at the left endpoint
-            # spline.SetRightConstraint(2)  # Free slope at the right endpoint
-            # spline.SetClosed(False)  # Not a closed spline
-
-            # for i in range(points.GetNumberOfPoints()):
-            #     x, y, z = points.GetPoint(i)  # Assuming points are (x, y, z)
-            #     spline.AddPoint(i, x, y, z)
-
-
-
-            # # Resample the spline to have n points
-            # n_points = 10
-            # splineFilter = vtk.vtkSplineFilter()
-            # splineFilter.SetInputData(upper_spinous)
-            # splineFilter.SetSpline(spline)
-            # splineFilter.SetNumberOfOutputPoints(n_points)
-            # splineFilter.Update()
-
-            # points = splineFilter.GetOutput().GetPoints()
-            # print(points)
-
-            # mkup = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsFiducialNode', "Curve")
-            # mkup.GetDisplayNode().SetTextScale(0.0)
-            # mkup.GetDisplayNode().SetSelectedColor(1, 0, 1)
-            # for i in range(points.GetNumberOfPoints()):
-            #     mkup.AddControlPoint(points.GetPoint(i))
-
-            ###################################################################################################################################################
-    
     '''
     Detect ligamentum flavum landmarks
     '''

@@ -283,3 +283,11 @@ class SlicerTools:
 
         pointCloudModelNode = slicer.modules.models.logic().AddModel(glyph.GetOutputPort())
         return pointCloudModelNode
+    
+    '''
+    Resample curve to given number of points
+    '''
+    def resampleCurve(curveNode, numberOfPoints):
+
+        sampleDist = curveNode.GetCurveLengthWorld() / (numberOfPoints-1)
+        curveNode.ResampleCurveWorld(sampleDist)
