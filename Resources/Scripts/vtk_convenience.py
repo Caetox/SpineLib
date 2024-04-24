@@ -12,6 +12,8 @@ from typing import Union, Generator, Tuple, List, Callable
 from math import cos, radians
 import numpy as np
 import pyvista as pv
+import pyacvd
+from vtk.util import numpy_support
 
 # pylint: disable=no-name-in-module
 from vtk import (
@@ -45,6 +47,16 @@ from vtk import (
     vtkPointLocator,
     vtkMath,
     vtkPolyDataConnectivityFilter,
+    vtkTriangleFilter,
+    vtkFillHolesFilter,
+    vtkAppendPolyData,
+    vtkGeometryFilter,
+    vtkDelaunay3D,
+    vtkGenericCell,
+    vtkFeatureEdges,
+    vtkIdFilter,
+    vtkTransformPolyDataFilter,
+    vtkTransform,
     mutable,
 )
 from numpy import zeros, array, dot, ndarray
@@ -357,15 +369,18 @@ def delete_points(polydata: vtkPolyData, ids: vtkIdTypeArray) -> vtkPolyData:
     remove_filter.Update()
     output = remove_filter.GetOutput()
 
+    cleaned_polydata = polydata_clean(output, tolerance=0.001)
+
+    return cleaned_polydata
+
+def polydata_clean(polydata, tolerance=0.001):
     cleaner = vtkCleanPolyData()
-    cleaner.SetInputData(output)
-    cleaner.SetTolerance(0.001)  # Adjust tolerance as needed
+    cleaner.SetInputData(polydata)
+    cleaner.SetTolerance(tolerance)
     cleaner.PointMergingOn()
     cleaner.Update()
 
-    cleaned_polydata = cleaner.GetOutput()
-
-    return cleaned_polydata
+    return cleaner.GetOutput()
 
 
 def filter_point_ids(
@@ -602,10 +617,12 @@ def voxelization(geometry: vtkPolyData, factor):
     voxels = pv.voxelize(geometry, density=density)
     return voxels.points
 
-
+'''
+Find id of the closest vertex to given point
+'''
 def find_closest_point_id(polydata, point):
     # Create a locator for the model
-    locator = vtkCellLocator()
+    locator = vtkPointLocator()
     locator.SetDataSet(polydata)
     locator.BuildLocator()
 
@@ -666,3 +683,150 @@ def filterLargestRegion(polydata):
     connectivity_filter.Update()
 
     return connectivity_filter.GetOutput()
+
+
+'''
+Fit a plane to a numpy array of points
+'''
+def fitPlane(points):
+    # check i points is numpy array
+
+
+    if isinstance(points, ndarray) or isinstance(points, list):
+        vtk_points = vtkPoints()
+        for point in points:
+            vtk_points.InsertNextPoint(point)
+    elif isinstance(points, vtkPoints):
+        vtk_points = points
+    else:
+        raise ValueError("Input must be either vtkPoints or a list of points")
+    
+    center = [0.0, 0.0, 0.0]
+    normal = [0.0, 0.0, 1.0]
+    vtkPlane.ComputeBestFittingPlane(vtk_points, center, normal)
+
+    return center, normal
+
+'''
+Remesh polydata
+'''
+def polydata_remesh(polydata, subdivide=2, clusters=5000):
+
+    tri_filter = vtkTriangleFilter()
+    tri_filter.SetInputData(polydata)
+    tri_filter.Update()
+    inputMesh = pv.wrap(tri_filter.GetOutput())
+    clus = pyacvd.Clustering(inputMesh)
+    if subdivide > -1:
+        clus.subdivide(subdivide)
+    clus.cluster(clusters)
+    outputMesh = vtkPolyData()
+    outputMesh.DeepCopy(clus.create_mesh())
+
+    return outputMesh
+
+'''
+Fill holes in polydata
+'''
+def polydata_fillHoles(polydata, maximumHoleSize=1000.0):
+
+    fill = vtkFillHolesFilter()
+    fill.SetInputData(polydata)
+    fill.SetHoleSize(maximumHoleSize)
+
+    # Need to auto-orient normals, otherwise holes could appear to be unfilled when
+    # only front-facing elements are chosen to be visible.
+    normals = vtkPolyDataNormals()
+    normals.SetInputConnection(fill.GetOutputPort())
+    normals.SetAutoOrientNormals(True)
+    normals.Update()
+
+    outputMesh = normals.GetOutput()
+
+    return outputMesh
+
+'''
+Polydata append filter
+'''
+def polydata_append(polydata_1, polydata_2):
+
+    appendFilter = vtkAppendPolyData()
+    appendFilter.AddInputData(polydata_1)
+    appendFilter.AddInputData(polydata_2)
+    appendFilter.Update()
+    outputPolydata = polydata_clean(appendFilter.GetOutput())
+
+    return outputPolydata
+
+'''
+Convex hull of polydata
+'''
+def polydata_convexHull(polydata):
+
+    convexHull = vtkDelaunay3D()
+    convexHull.SetInputData(polydata)
+    outerSurface = vtkGeometryFilter()
+    outerSurface.SetInputConnection(convexHull.GetOutputPort())
+    outerSurface.Update()
+    outputMesh = polydata_clean(outerSurface.GetOutput())
+
+    return outputMesh
+
+'''
+Get contact polydata between two polydata
+'''
+def get_contact_polydata(polydata_1, polydata_2):
+
+    # remesh
+    polydata_1 = polydata_remesh(polydata_1, subdivide=2, clusters=5000)
+    polydata_2 = polydata_remesh(polydata_2, subdivide=2, clusters=5000)
+
+    points_list_1 = numpy_support.vtk_to_numpy(polydata_1.GetPoints().GetData())
+    points_list_2 = numpy_support.vtk_to_numpy(polydata_2.GetPoints().GetData())
+
+    contact_ids = []
+    for i, point in enumerate(points_list_1):
+        distances = np.linalg.norm(points_list_2 - point, axis=1)
+        contact_ids.append(np.argmin(distances))
+
+    # filter polydata
+    non_contact_ids = [i for i in range(len(points_list_2)) if i not in contact_ids]
+    remove_ids = vtkIdTypeArray()
+    for id_ in non_contact_ids:
+        remove_ids.InsertNextTuple1(id_)
+    contact_polydata = delete_points(polydata_2, remove_ids)
+
+    # fill holes
+    contact_polydata = polydata_fillHoles(contact_polydata, maximumHoleSize=1000.0)
+
+    return contact_polydata
+
+'''
+Get IDs of boundary edges of polydata
+'''
+def extractBoundary(polydata):
+
+    edgeFilter = vtkFeatureEdges()
+    edgeFilter.SetInputData(polydata)
+    edgeFilter.BoundaryEdgesOn()
+    edgeFilter.ManifoldEdgesOff()
+    edgeFilter.NonManifoldEdgesOff()
+    edgeFilter.FeatureEdgesOff()
+    edgeFilter.Update()
+
+    edges = edgeFilter.GetOutput()
+    edgePoints = numpy_support.vtk_to_numpy(edges.GetPoints().GetData())
+
+    return edges
+
+def transform_polydata(polydata, transformMatrix):
+    
+        transform = vtkTransform()
+        transform.SetMatrix(transformMatrix)
+    
+        transformFilter = vtkTransformPolyDataFilter()
+        transformFilter.SetInputData(polydata)
+        transformFilter.SetTransform(transform)
+        transformFilter.Update()
+    
+        return transformFilter.GetOutput()
