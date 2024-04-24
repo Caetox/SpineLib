@@ -33,7 +33,7 @@ class SymmetryPlane:
                  numIterations: int,
                 ) -> None:
         
-        self.symmetry_plane = SymmetryPlane.__fit_symmetry_plane(geometry_node = model_node, geometry=geometry, numIterations=numIterations)
+        self.symmetry_plane = SymmetryPlane.__fit_symmetry_plane(geometry=geometry, numIterations=numIterations)
 
         # visualize
         planeNode = SpineLib.SlicerTools.createMarkupsPlaneNode(self.symmetry_plane.GetOrigin(), self.symmetry_plane.GetNormal(), "symmetryPlane", 100, 100)
@@ -41,7 +41,7 @@ class SymmetryPlane:
           
 
 
-    def __fit_symmetry_plane(geometry_node, geometry: vtk.vtkPolyData, numIterations: int):
+    def __fit_symmetry_plane(geometry: vtk.vtkPolyData, numIterations: int):
 
         centerOfMass = conv.calc_center_of_mass(geometry)
         points = vtk_to_numpy(geometry.GetPoints().GetData())
