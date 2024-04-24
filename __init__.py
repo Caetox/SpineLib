@@ -59,3 +59,4 @@ from .Spine import *
 from .UpApproximator import *
 from .Vertebra import *
 from .LigamentLandmarks import *
+from .SymmetryPlane import *
