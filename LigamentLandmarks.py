@@ -29,49 +29,70 @@ class LigamentLandmarks:
         for vt, vertebra in enumerate(spine.vertebrae):
 
             # calculate the spinal canal width
-            landmarks   = vertebra.shapeDecomposition.landmarks
-            spinal_canal_width = np.linalg.norm(landmarks["left_pedicle_medial"] - landmarks["right_pedicle_medial"])
-            print("Spinal canal width: ", spinal_canal_width)
+            left_medial = vertebra.shapeDecomposition.landmarks["left_pedicle_medial"]
+            right_medial = vertebra.shapeDecomposition.landmarks["right_pedicle_medial"]
+            canal_vector = right_medial - left_medial
+            factor = 0.1
+            left_origin = left_medial + (factor * canal_vector)
+            right_origin = right_medial - (factor * canal_vector)
 
-            plane_origins = np.linspace(landmarks["left_pedicle_medial"], landmarks["right_pedicle_medial"], 7, axis=0)
 
-            sup_intersections = [conv.cut_plane(vertebra.body.superior_endplate, plane_origin, vertebra.orientation.r) for plane_origin in plane_origins]
-            inf_intersections = [conv.cut_plane(vertebra.body.inferior_endplate, plane_origin, vertebra.orientation.r) for plane_origin in plane_origins]
+            # superior landmarks
+            superior_boundary = conv.extractBoundary(vertebra.body.superior_endplate)
+            superior_clipped = conv.clip_plane(superior_boundary, left_origin, vertebra.orientation.r)
+            superior_clipped = conv.clip_plane(superior_clipped, right_origin, -vertebra.orientation.r)
+            anterior_clipped = conv.clip_plane(superior_clipped, vertebra.center, vertebra.orientation.a)
+            posterior_clipped = conv.clip_plane(superior_clipped, vertebra.center, -vertebra.orientation.a)
 
-            ligament_landmarks_markupsNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsFiducialNode', "LigamentLandmarks")
-            ligament_landmarks_markupsNode.GetDisplayNode().SetTextScale(0.0)
-            ligament_landmarks_markupsNode.GetDisplayNode().SetSelectedColor(1, 0, 0)
-            ligament_landmarks = []
+            sorted_anterior = conv.sorted_points(list(numpy_support.vtk_to_numpy(anterior_clipped.GetPoints().GetData())), vertebra.orientation.r)
+            sorted_posterior = conv.sorted_points(list(numpy_support.vtk_to_numpy(posterior_clipped.GetPoints().GetData())), vertebra.orientation.r)
 
-            for i in sup_intersections + inf_intersections:
-                SpineLib.SlicerTools.createModelNode(i, "SupIntersection", color=[1.0, 0.0, 0.0], opacity=0.7)
-                regression = conv.calc_main_component(i)
-                regression = (regression if regression.dot(vertebra.orientation.a) >= 0 else -regression)
-                points = conv.sorted_points(i, regression)
-                ligament_landmarks.append(np.array(points[0]))
-                ligament_landmarks.append(np.array(points[-1]))
+            sup_all_curve = SpineLib.SlicerTools.createResampledCurve(sorted_anterior, 7, name="ALL", color=[1, 0, 0])
+            sup_pll_curve = SpineLib.SlicerTools.createResampledCurve(sorted_posterior, 7, name="PLL", color=[1, 0, 0])
 
-            for lm in ligament_landmarks:
-                ligament_landmarks_markupsNode.AddControlPoint(lm)
+
+            # inferior landmarks
+            inferior_boundary = conv.extractBoundary(vertebra.body.inferior_endplate)
+            inferior_clipped = conv.clip_plane(inferior_boundary, left_origin, vertebra.orientation.r)
+            inferior_clipped = conv.clip_plane(inferior_clipped, right_origin, -vertebra.orientation.r)
+            anterior_clipped = conv.clip_plane(inferior_clipped, vertebra.center, vertebra.orientation.a)
+            posterior_clipped = conv.clip_plane(inferior_clipped, vertebra.center, -vertebra.orientation.a)
+
+            sorted_anterior = conv.sorted_points(list(numpy_support.vtk_to_numpy(anterior_clipped.GetPoints().GetData())), vertebra.orientation.r)
+            sorted_posterior = conv.sorted_points(list(numpy_support.vtk_to_numpy(posterior_clipped.GetPoints().GetData())), vertebra.orientation.r)
+
+            inf_all_curve = SpineLib.SlicerTools.createResampledCurve(sorted_anterior, 7, name="ALL", color=[1, 0, 0])
+            inf_pll_curve = SpineLib.SlicerTools.createResampledCurve(sorted_posterior, 7, name="PLL", color=[1, 0, 0])
+
             
-            return ligament_landmarks
 
 
 
 
-    '''
-    Get contact points between two polydata
-    '''
-    def get_contact_points(point_list_1, point_list_2):
+    # '''
+    # Get contact points between two polydata
+    # '''
+    # def get_contact_points(point_list_1, point_list_2):
 
-        contact_points = []
-        for point in point_list_1:
-            distances = np.linalg.norm(point_list_2 - point, axis=1)
-            contact_points.append(point_list_2[np.argmin(distances)])
+    #     contact_points = []
+    #     for point in point_list_1:
+    #         distances = np.linalg.norm(point_list_2 - point, axis=1)
+    #         contact_points.append(point_list_2[np.argmin(distances)])
   
-        return contact_points
+    #     return contact_points
     
-
+    
+    '''
+    Project points onto plane
+    '''
+    def project_points(points, plane_center, plane_normal):
+            
+            plane_normal = plane_normal / np.linalg.norm(plane_normal)
+            projected_points = []
+            for point in points:
+                projected_points.append(point - np.dot(point - plane_center, plane_normal) * plane_normal)
+            
+            return np.array(projected_points)
 
 
     '''
@@ -87,30 +108,32 @@ class LigamentLandmarks:
 
             for inf_AS_polydata, sup_AI_polydata, medial_direction in zip(inf_AS_polydatas, sup_AI_polydatas, medial_directions):
 
-                # get facet contact surface
-                inf_AS_points = numpy_support.vtk_to_numpy(inf_AS_polydata.GetPoints().GetData())
-                sup_AI_points = numpy_support.vtk_to_numpy(sup_AI_polydata.GetPoints().GetData())
+                # get facet contact polydata
+                inf_contact_polydata = conv.get_contact_polydata(sup_AI_polydata, inf_AS_polydata)
+                sup_contact_polydata = conv.get_contact_polydata(inf_AS_polydata, sup_AI_polydata)
 
-                contact_points_inf = LigamentLandmarks.get_contact_points(sup_AI_points, inf_AS_points)
-                contact_points_markup = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsFiducialNode', "ContactPoints")
-                contact_points_markup.GetDisplayNode().SetTextScale(0.0)
-                contact_points_markup.GetDisplayNode().SetSelectedColor(1, 0, 0)
-                contact_points_markup.GetDisplayNode().SetGlyphScale(1.0)
-                for cp in contact_points_inf:
-                    contact_points_markup.AddControlPoint(cp)
+                combined_surface = conv.polydata_append(inf_contact_polydata, sup_contact_polydata)
+                facet_polydata = conv.polydata_convexHull(combined_surface)
+                #SpineLib.SlicerTools.createModelNode(facet_polydata, "Facet", color=[1.0, 0.0, 0.0], opacity=0.7)
 
+
+
+                # # get facet contact surface
+                # inf_AS_points = numpy_support.vtk_to_numpy(inf_AS_polydata.GetPoints().GetData())
+                # sup_AI_points = numpy_support.vtk_to_numpy(sup_AI_polydata.GetPoints().GetData())
+                # contact_points_inf = LigamentLandmarks.get_contact_points(sup_AI_points, inf_AS_points)
+                # contact_points_sup = LigamentLandmarks.get_contact_points(inf_AS_points, sup_AI_points)
+                # SpineLib.SlicerTools.createMarkupsFiducialNode(contact_points_inf, "ContactPoints", color=[1, 0, 0], glyphScale=1.0)
+                # SpineLib.SlicerTools.createMarkupsFiducialNode(contact_points_sup, "ContactPoints", color=[0, 1, 0], glyphScale=1.0)
 
                 # Compute best fit plane
-                points = vtk.vtkPoints()
-                for point in contact_points_inf:
-                    points.InsertNextPoint(point)
-                center = [0.0, 0.0, 0.0]
-                normal = [0.0, 0.0, 1.0]
-                vtk.vtkPlane.ComputeBestFittingPlane(points, center, normal)
-                normal = np.array(normal)
+                #planeCenter, planeNormal = conv.fitPlane(np.concatenate((contact_points_inf, contact_points_sup)))
+                planeCenter, planeNormal = conv.fitPlane(numpy_support.vtk_to_numpy(inf_contact_polydata.GetPoints().GetData()))
+                normal = np.array(planeNormal)
                 # check if normal or inverse of normal is more similar with medial_direction
                 if np.dot(normal, np.average([medial_direction, -inferior_vertebra.orientation.a], axis=0)) < 0:
                     normal = -normal
+                #planeNode = SpineLib.SlicerTools.createMarkupsPlaneNode(planeCenter, normal, "FittedPlane", 20, 20, opacity=0.7)
 
                 # local plane directions
                 u = inferior_vertebra.orientation.s
@@ -121,47 +144,70 @@ class LigamentLandmarks:
                 facet_medial = normal
                 facet_LR = np.cross(facet_up, facet_medial)
 
-                # filter polydata to get facet surface
-                facet_polydata = conv.eliminate_misaligned_faces(inf_AS_polydata, center, normal, 45.0)
-                facet_polydata = conv.filterLargestRegion(facet_polydata)
-                facet_center = np.mean(numpy_support.vtk_to_numpy(facet_polydata.GetPoints().GetData()), axis=0)
+                # # projected points
+                # lr_sorted = conv.sorted_points(list(inf_contact_points_projected_up), facet_LR)
+                # lr_len = np.linalg.norm(lr_sorted[0] - lr_sorted[-1])
+                # is_sorted = conv.sorted_points(list(inf_contact_points_projected_up), facet_up)
+                # is_len = np.linalg.norm(is_sorted[0] - is_sorted[-1])
 
-                # Display best fit plane as a markups plane
-                planeNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsPlaneNode')
-                planeNode.SetCenter(facet_center)
-                planeNode.SetNormal(normal)
-                planeNode.SetSize(20, 20)
-                planeNode.GetDisplayNode().SetOpacity(0.5)
-                planeNode.GetDisplayNode().SetHandlesInteractive(False)
-                SpineLib.SlicerTools.createModelNode(facet_polydata, "Facet", color=[1.0, 0.0, 0.0], opacity=0.7)
+                # inf_contact_points_projected_up = LigamentLandmarks.project_points(contact_points_inf, planeCenter, facet_up)
+                # SpineLib.SlicerTools.createMarkupsFiducialNode(inf_contact_points_projected_up, "ProjectedPoints", color=[1, 0, 0], glyphScale=1.0)
+                # lr_sorted = conv.sorted_points(list(inf_contact_points_projected_up), facet_LR)
+                # lr_1 = lr_sorted[0]
+                # lr_2 = lr_sorted[-1]
+                # inf_contact_points_projected_up = LigamentLandmarks.project_points(contact_points_inf, planeCenter, facet_LR)
+                # SpineLib.SlicerTools.createMarkupsFiducialNode(inf_contact_points_projected_up, "ProjectedPoints", color=[1, 0, 0], glyphScale=1.0)
+                # is_sorted = conv.sorted_points(list(inf_contact_points_projected_up), facet_up)
+                # is_1 = is_sorted[0]
+                # is_2 = is_sorted[-1]
 
-                lr_intersection = conv.cut_plane(facet_polydata, facet_center, facet_up)
+                # inf_ligament_landmarks = [lr_1, lr_2, is_1, is_2]
+                # inf_ligament_markup = SpineLib.SlicerTools.createMarkupsFiducialNode(inf_ligament_landmarks, "InferiorVertebraLigamentLandmarks", color=[0, 0, 1])
+
+                ###############
+
+                # # filter polydata to get inferior facet surface
+                # inf_contact_polydata = conv.eliminate_misaligned_faces(inf_AS_polydata, planeCenter, normal, 30.0)
+                # inf_contact_polydata = conv.filterLargestRegion(inf_contact_polydata)
+                inf_facet_center = np.mean(numpy_support.vtk_to_numpy(inf_contact_polydata.GetPoints().GetData()), axis=0)
+                # SpineLib.SlicerTools.createModelNode(inf_facet_polydata, "Facet", color=[1.0, 0.0, 0.0], opacity=0.7)
+
+                lr_intersection = conv.cut_plane(inf_contact_polydata, inf_facet_center, facet_up)
                 lr_sorted = conv.sorted_points(lr_intersection, facet_LR)
                 lr_1 = lr_sorted[0]
                 lr_2 = lr_sorted[-1]
-                is_intersection = conv.cut_plane(facet_polydata, facet_center, facet_LR)
+                is_intersection = conv.cut_plane(inf_contact_polydata, inf_facet_center, facet_LR)
                 is_sorted = conv.sorted_points(is_intersection, facet_up)
                 is_1 = is_sorted[0]
                 is_2 = is_sorted[-1]
 
-                inf_ligament_markup = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsFiducialNode', "InferiorVertebraLigamentLandmarks")
-                inf_ligament_markup.GetDisplayNode().SetTextScale(0.0)
-                inf_ligament_markup.GetDisplayNode().SetSelectedColor(0, 0, 1)
                 inf_ligament_landmarks = [lr_1, lr_2, is_1, is_2]
-                for lm in inf_ligament_landmarks:
-                    inf_ligament_markup.AddControlPoint(lm)
+                inf_ligament_markup = SpineLib.SlicerTools.createMarkupsFiducialNode(inf_ligament_landmarks, "InferiorVertebraLigamentLandmarks", color=[0, 0, 1])
 
-                sup_ligament_landmarks = []
-                for lm in inf_ligament_landmarks:
-                    # find closest point in superior vertebra AIL to the landmark
-                    closest_point = sorted(sup_AI_points, key=lambda p: np.linalg.norm(p - lm))[0]
-                    sup_ligament_landmarks.append(closest_point)
+                # filter polydata to get superior facet surface
+                # sup_contact_polydata = conv.eliminate_misaligned_faces(sup_AI_polydata, planeCenter, -normal, 30.0)
+                # sup_contact_polydata = conv.filterLargestRegion(sup_contact_polydata)
+                sup_facet_center = np.mean(numpy_support.vtk_to_numpy(sup_contact_polydata.GetPoints().GetData()), axis=0)
+                #SpineLib.SlicerTools.createModelNode(sup_facet_polydata, "Facet", color=[1.0, 0.0, 0.0], opacity=0.7)
 
-                sup_ligament_markup = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsFiducialNode', "SuperiorVertebraLigamentLandmarks")
-                sup_ligament_markup.GetDisplayNode().SetTextScale(0.0)
-                sup_ligament_markup.GetDisplayNode().SetSelectedColor(0, 1, 1)
-                for lm in sup_ligament_landmarks:
-                    sup_ligament_markup.AddControlPoint(lm)
+                lr_intersection = conv.cut_plane(sup_contact_polydata, sup_facet_center, facet_up)
+                lr_sorted = conv.sorted_points(lr_intersection, facet_LR)
+                lr_1 = lr_sorted[0]
+                lr_2 = lr_sorted[-1]
+                is_intersection = conv.cut_plane(sup_contact_polydata, sup_facet_center, facet_LR)
+                is_sorted = conv.sorted_points(is_intersection, facet_up)
+                is_1 = is_sorted[0]
+                is_2 = is_sorted[-1]
+
+                sup_ligament_landmarks = [lr_1, lr_2, is_1, is_2]
+                sup_ligament_markup = SpineLib.SlicerTools.createMarkupsFiducialNode(sup_ligament_landmarks, "SuperiorVertebraLigamentLandmarks", color=[0, 1, 1])
+
+
+
+                # # get closest points on superior facet to the inferior facet landmarks
+                # sup_ligament_landmarks = [sorted(sup_AI_points, key=lambda p: np.linalg.norm(p - lm))[0] for lm in inf_ligament_landmarks]
+                # sup_ligament_markup = SpineLib.SlicerTools.createMarkupsFiducialNode(sup_ligament_landmarks, "SuperiorVertebraLigamentLandmarks", color=[0, 1, 1])
+
 
 
         # for vt, vertebra in enumerate(spine.vertebrae):
@@ -180,53 +226,33 @@ class LigamentLandmarks:
     def _detect_spinous_landmarks(spine):
         
         for vt, vertebra in enumerate(spine.vertebrae):
-
+            
+            # filter data points
             spinous_polydata = vertebra.shapeDecomposition.process_polydata["S"]
-
             upper_spinous = conv.eliminate_misaligned_faces(spinous_polydata, vertebra.center, vertebra.orientation.s, 60.0)
             lower_spinous = conv.eliminate_misaligned_faces(spinous_polydata, vertebra.center, -vertebra.orientation.s, 60.0)
-            upper_spinous_points = numpy_support.vtk_to_numpy(upper_spinous.GetPoints().GetData())
-            lower_spinous_points = numpy_support.vtk_to_numpy(lower_spinous.GetPoints().GetData())
-
-            # # create curve for upper_spinous_points
-            # upper_spinous_curve = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsCurveNode', "UpperSpinousCurve")
-            # upper_spinous_curve.GetDisplayNode().SetTextScale(0.0)
-            # upper_spinous_curve.GetDisplayNode().SetSelectedColor(1, 0, 0)
-            # slicer.util.updateMarkupsControlPointsFromArray(upper_spinous_curve, upper_spinous_points)
-
             SpineLib.SlicerTools.createModelNode(upper_spinous, "UpperSpinous", color=[1.0, 0.0, 0.0], opacity=0.8)
             SpineLib.SlicerTools.createModelNode(lower_spinous, "LowerSpinous", color=[1.0, 0.0, 0.0], opacity=0.8)
 
-            sorted_upper_spinous = conv.sorted_points(upper_spinous, conv.calc_main_component(upper_spinous))
             # create curve for upper_spinous_points
-            upper_spinous_curve = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsCurveNode', "UpperSpinousCurve")
-            upper_spinous_curve.SetCurveTypeToPolynomial()
-            upper_spinous_curve.GetDisplayNode().SetTextScale(0.0)
-            upper_spinous_curve.GetDisplayNode().SetSelectedColor(1, 0, 0)
-            slicer.util.updateMarkupsControlPointsFromArray(upper_spinous_curve, np.array(sorted_upper_spinous))
+            sorted_upper_spinous = conv.sorted_points(upper_spinous, conv.calc_main_component(upper_spinous))
+            SpineLib.SlicerTools.createMarkupsFiducialNode(sorted_upper_spinous, "UpperSpinousLandmarks", color=[0, 0, 1])
+            SpineLib.SlicerTools.createResampledCurve(sorted_upper_spinous, 8, name="UpperSpinousCurve", color=[1, 0, 0])
 
-            sorted_lower_spinous = conv.sorted_points(lower_spinous, conv.calc_main_component(lower_spinous))
             # create curve for lower_spinous_points
-            lower_spinous_curve = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsCurveNode', "LowerSpinousCurve")
-            lower_spinous_curve.SetCurveTypeToPolynomial()
-            lower_spinous_curve.GetDisplayNode().SetTextScale(0.0)
-            lower_spinous_curve.GetDisplayNode().SetSelectedColor(1, 0, 0)
-            slicer.util.updateMarkupsControlPointsFromArray(lower_spinous_curve, np.array(sorted_lower_spinous))
+            sorted_lower_spinous = conv.sorted_points(lower_spinous, conv.calc_main_component(lower_spinous))
+            SpineLib.SlicerTools.createMarkupsFiducialNode(sorted_lower_spinous, "LowerSpinousLandmarks", color=[0, 0, 1])
+            SpineLib.SlicerTools.createResampledCurve(sorted_lower_spinous, 8, name="LowerSpinousCurve", color=[1, 0, 0])
 
-            # resample curve
-            SpineLib.SlicerTools.resampleCurve(upper_spinous_curve, 8)
 
             # Compute best fit plane
-            points = vtk.vtkPoints()
-            for point in np.concatenate((np.array(upper_spinous_points), np.array(lower_spinous_points))):
-                points.InsertNextPoint(point)
-            center = [0.0, 0.0, 0.0]
-            normal = [0.0, 0.0, 1.0]
-            vtk.vtkPlane.ComputeBestFittingPlane(points, center, normal)
+            points = np.concatenate((numpy_support.vtk_to_numpy(upper_spinous.GetPoints().GetData()), numpy_support.vtk_to_numpy(lower_spinous.GetPoints().GetData())))
+            planeCenter, planeNormal = conv.fitPlane(points)
+
             #Display best fit plane as a markups plane
             planeNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsPlaneNode')
-            planeNode.SetCenter(center)
-            planeNode.SetNormal(normal)
+            planeNode.SetCenter(planeCenter)
+            planeNode.SetNormal(planeNormal)
             planeNode.SetSize(50, 50)
             planeNode.GetDisplayNode().SetOpacity(0.5)
             planeNode.GetDisplayNode().SetHandlesInteractive(False)
@@ -242,63 +268,88 @@ class LigamentLandmarks:
 
         for vt, vertebra in enumerate(spine.vertebrae):
             
-            # canal_markups = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsFiducialNode', "Canal")
-            # canal_markups.GetDisplayNode().SetTextScale(0.0)
-            # canal_markups.GetDisplayNode().SetSelectedColor(0, 1, 1)
-            # # canal_path = self.runDijkstra(shapeDecomposition.processes_poly, left_sphere_intersection_closest_point, right_sphere_intersection_closest_point)
-            # # canal_path_points = numpy_support.vtk_to_numpy(canal_path.GetData())
+            left_keypoint  = vertebra.shapeDecomposition.landmarks["left_pedicle_superior"]
+            right_keypoint = vertebra.shapeDecomposition.landmarks["right_pedicle_superior"]
+
+            left_medial = vertebra.shapeDecomposition.landmarks["left_pedicle_medial"]
+            right_medial = vertebra.shapeDecomposition.landmarks["right_pedicle_medial"]
+            canal_width = np.linalg.norm(left_medial - right_medial)
+            canal_vector = right_medial - left_medial
+            left_origin = left_medial + 0.2 * canal_vector
+            right_origin = right_medial - 0.2 * canal_vector
+            polydata = vertebra.shapeDecomposition.processes
+
+            # run dijkstra
+            flavum_curvePoints = conv.runDijkstra(polydata, np.array(left_medial), np.array(right_medial))
 
 
-            # # extract posterior canal
-            # # extract points, where normals are similar to the given direction
-            # posterior_canal = conv.eliminate_misaligned_faces(polydata=shapeDecomposition.processes_poly, center=[0,0,0], direction=vertebra.orientation.a, max_angle=60.0)
-            # connectivity_filter = vtk.vtkPolyDataConnectivityFilter()
-            # connectivity_filter.SetInputData(posterior_canal)
-            # connectivity_filter.SetExtractionModeToLargestRegion()
-            # connectivity_filter.Update()
-            # posterior_canal = connectivity_filter.GetOutput()
-            # cleaner = vtk.vtkCleanPolyData()
-            # cleaner.SetInputData(posterior_canal)
-            # cleaner.SetTolerance(0.001)  # Adjust tolerance as needed
-            # cleaner.PointMergingOn()
-            # cleaner.Update()
+            # clip to left and right
+            parametricSpline = vtk.vtkParametricSpline()
+            parametricSpline.SetPoints(flavum_curvePoints)
+            parametricFunctionSource = vtk.vtkParametricFunctionSource()
+            parametricFunctionSource.SetParametricFunction(parametricSpline)
+            parametricFunctionSource.Update()
 
-            # posterior_canal = cleaner.GetOutput()
-            # SpineLib.SlicerTools.createModelNode(posterior_canal, "PosteriorCanal", color=[1.0, 0.0, 0.0], opacity=1.0)
+            # left half
+            left_clipped = conv.clip_plane(parametricFunctionSource.GetOutput(), vertebra.center, -vertebra.orientation.r)
+            right_clipped = conv.clip_plane(parametricFunctionSource.GetOutput(), vertebra.center, vertebra.orientation.r)
 
-            # # compute geodesic path with dijkstra
-            # dijkstraPoints = self.runDijkstra(posterior_canal, left_sphere_intersection_highest_point, right_sphere_intersection_highest_point)
-            # #dijkstraPoints = self.runDijkstra(shapeDecomposition.processes_poly, left_superior_articular_segment_highest_point, right_superior_articular_segment_highest_point)
+            left_flavum_Points = numpy_support.vtk_to_numpy(left_clipped.GetPoints().GetData())
+            right_flavum_Points = numpy_support.vtk_to_numpy(right_clipped.GetPoints().GetData())
 
-            # path = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsFiducialNode', "Path")
-            # path.GetDisplayNode().SetTextScale(0.0)
-            # path.GetDisplayNode().SetSelectedColor(1, 0, 1)
-            # #path.GetDisplayNode().SetOpacity(0.5)
-            # path.GetDisplayNode().SetGlyphScale(1.0)
-            # for dp in range(dijkstraPoints.GetNumberOfPoints()):
-            #     path.AddControlPoint(dijkstraPoints.GetPoint(dp))
+            left_flavum_curve = SpineLib.SlicerTools.createResampledCurve(left_flavum_Points, 7, name="FlavumCurve", color=[1, 0, 1])
+            right_flavum_curve = SpineLib.SlicerTools.createResampledCurve(right_flavum_Points, 7, name="FlavumCurve", color=[1, 0, 1])
+
+            left_flavum_Points = slicer.util.arrayFromMarkupsControlPoints(left_flavum_curve)[1:-1]
+            right_flavum_Points = slicer.util.arrayFromMarkupsControlPoints(right_flavum_curve)[1:-1]
+
+            
+            slicer.util.updateMarkupsControlPointsFromArray(left_flavum_curve, np.array(left_flavum_Points))
+            slicer.util.updateMarkupsControlPointsFromArray(right_flavum_curve, np.array(right_flavum_Points))
 
 
 
+            # SpineLib.SlicerTools.createMarkupsFiducialNode(left_flavum_Points, "FlavumLandmarksL", color=[1, 0, 0])
+            # SpineLib.SlicerTools.createMarkupsFiducialNode(right_flavum_Points, "FlavumLandmarksR", color=[1, 0, 0])
 
-            # # find intersection points
+
+
+
+
+
+
+            # # CLIPPING
+
+            # # create curve
             # parametricSpline = vtk.vtkParametricSpline()
-            # parametricSpline.SetPoints(dijkstraPoints)
+            # parametricSpline.SetPoints(flavum_curvePoints)
             # parametricFunctionSource = vtk.vtkParametricFunctionSource()
             # parametricFunctionSource.SetParametricFunction(parametricSpline)
             # parametricFunctionSource.Update()
 
-            # sup_flavum = [conv.cut_plane(parametricFunctionSource.GetOutput(), plane_origin, vertebra.orientation.r).GetPoint(0) for plane_origin in plane_origins]
-            # #intersection = conv.cut_plane(parametricFunctionSource.GetOutput(), plane_origins[3], vertebra.orientation.r)
+            # clipped = conv.clip_plane(parametricFunctionSource.GetOutput(), left_origin, vertebra.orientation.r)
+            # clipped = conv.clip_plane(clipped, right_origin, -vertebra.orientation.r)
+            # #clipped = conv.clip_plane(clipped, right_keypoint, vertebra.orientation.r)
 
-            # flavum = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsFiducialNode', "Flavum")
-            # flavum.GetDisplayNode().SetTextScale(0.0)
-            # flavum.GetDisplayNode().SetSelectedColor(1, 0, 0)
-            # for sf in sup_flavum:
-            #     try:
-            #         flavum.AddControlPoint(sf)
-            #     except:
-            #         pass
+            # flavum_curvePoints = numpy_support.vtk_to_numpy(clipped.GetPoints().GetData())
+            # curveNode = SpineLib.SlicerTools.createResampledCurve(flavum_curvePoints, 7, name="FlavumCurve", color=[1, 0, 1])
 
-            pass
+
+
+
+
+            # # create curve node
+            # curveNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsCurveNode', "FlavumCurve")
+            # slicer.util.updateMarkupsControlPointsFromArray(curveNode, numpy_support.vtk_to_numpy(clipped.GetPoints().GetData()))
+
+
+            # # find intersection points
+            # plane_origins = np.linspace(vertebra.shapeDecomposition.landmarks["left_pedicle_medial"], vertebra.shapeDecomposition.landmarks["right_pedicle_medial"], 13, axis=0)
+            # flavum_landmarks = [conv.cut_plane(parametricFunctionSource.GetOutput(), plane_origin, vertebra.orientation.r).GetPoint(0) for plane_origin in plane_origins[3:-3]]
+
+            # # create markups node
+            # flavum_markupsNode = SpineLib.SlicerTools.createMarkupsFiducialNode(flavum_landmarks, "FlavumLandmarks", color=[1, 0, 0])
+
+            # SpineLib.SlicerTools.createResampledCurve(flavum_landmarks, 7, name="FlavumCurve", color=[1, 0, 1])
+
         pass
