@@ -41,6 +41,7 @@ class VertebralBody:
         )
         # filter with connectivity filter to remove outliers (only the largest connected region remains)
         endplate = conv.filterLargestRegion(endplate)
+        endplate = conv.polydata_clean(endplate)
 
         return endplate
     
