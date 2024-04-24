@@ -8,3 +8,5 @@ matplotlib
 numpy
 pyvista
 pyacvd
+open3d
+scikit-spatial
