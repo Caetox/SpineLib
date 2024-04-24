@@ -291,3 +291,47 @@ class SlicerTools:
 
         sampleDist = curveNode.GetCurveLengthWorld() / (numberOfPoints-1)
         curveNode.ResampleCurveWorld(sampleDist)
+
+    '''
+    Create curve an resample to given number of points
+    '''
+    def createResampledCurve(controlPoints, numberOfPoints, name="MarkupsCurve", color=[1,0,0]):
+
+        curve = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsCurveNode', name)
+        curve.SetCurveTypeToPolynomial()
+        curve.GetDisplayNode().SetTextScale(0.0)
+        curve.GetDisplayNode().SetSelectedColor(color)
+        slicer.util.updateMarkupsControlPointsFromArray(curve, np.array(controlPoints))
+        SpineLib.SlicerTools.resampleCurve(curve, numberOfPoints)
+
+        return curve
+    
+    '''
+    Create markups point list node from numpy array
+    '''
+    def createMarkupsFiducialNode(points, name="MarkupsFiducial", color=[0,0,1], glyphScale=3.0):
+
+        markupsNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsFiducialNode', name)
+        markupsNode.GetDisplayNode().SetSelectedColor(color)
+        markupsNode.GetDisplayNode().SetTextScale(0.0)
+        markupsNode.GetDisplayNode().SetGlyphScale(glyphScale)
+        for point in points:
+            markupsNode.AddFiducialFromArray(point, name)
+        
+        return markupsNode
+    
+    '''
+    Create markups plane node from origin and normal
+    '''
+    def createMarkupsPlaneNode(origin, normal, name="MarkupsPlane", width=50, length=50, color=[1,0,0], opacity=0.5):
+
+        markupsNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsPlaneNode', name)
+        markupsNode.SetOrigin(origin)
+        markupsNode.SetNormal(normal)
+        markupsNode.SetSize(width, length)
+        markupsNode.GetDisplayNode().SetHandlesInteractive(False)
+        markupsNode.GetDisplayNode().SetSelectedColor(color)
+        markupsNode.GetDisplayNode().SetOpacity(opacity)
+        
+        return markupsNode
+    
