@@ -143,37 +143,34 @@ class ShapeDecomposition:
         body_front = conv.get_intersection_points(geometry, center, (center + (orientation.a * size.depth)))
         canal_center = body_front - orientation.a * threshold
 
-        left_geometry                       = conv.clip_plane(geometry, canal_center, -orientation.r)
-        left_pedicle_intersection           = conv.cut_sphere(left_geometry, body_front, threshold)
-        left_pedicle_intersection_points    = numpy_support.vtk_to_numpy(left_pedicle_intersection.GetPoints().GetData())
-        # left_pedicle_intersection_distances = np.linalg.norm(left_pedicle_intersection_points - canal_center, axis=1)
-        # left_pedicle_medial_point           = left_pedicle_intersection_points[np.argmin(left_pedicle_intersection_distances)]
-        # left_pedicle_lateral_point          = left_pedicle_intersection_points[np.argmax(left_pedicle_intersection_distances)]
-        sorted_left_pedicle_points          = conv.sorted_points(list(left_pedicle_intersection_points), -orientation.r)
-        left_pedicle_medial_point           = sorted_left_pedicle_points[0]
-        left_pedicle_lateral_point          = sorted_left_pedicle_points[-1]
-        left_pedicle_com                    = np.mean(left_pedicle_intersection_points, axis=0)
+        left_geometry                   = conv.clip_plane(geometry, canal_center, -orientation.r)
+        left_pedicle_intersection       = conv.cut_sphere(left_geometry, body_front, threshold)
+        left_intersection_com           = np.mean(numpy_support.vtk_to_numpy(left_pedicle_intersection.GetPoints().GetData()), axis=0)
+        left_lr_intersection            = conv.cut_plane(left_pedicle_intersection, left_intersection_com, orientation.s)
+        left_lr_sorted                  = conv.sorted_points(left_lr_intersection, orientation.r)
+        left_is_intersection            = conv.cut_plane(left_pedicle_intersection, left_intersection_com, orientation.r)
+        left_is_sorted                  = conv.sorted_points(left_is_intersection, orientation.s)
 
-        right_geometry                      = conv.clip_plane(geometry, canal_center, orientation.r)
-        right_pedicle_intersection          = conv.cut_sphere(right_geometry, body_front, threshold)
-        right_pedicle_intersection_points   = numpy_support.vtk_to_numpy(right_pedicle_intersection.GetPoints().GetData())
-        # right_pedicle_intersection_distances= np.linalg.norm(right_pedicle_intersection_points - canal_center, axis=1)
-        # right_pedicle_medial_point          = right_pedicle_intersection_points[np.argmin(right_pedicle_intersection_distances)]
-        # right_pedicle_lateral_point         = right_pedicle_intersection_points[np.argmax(right_pedicle_intersection_distances)]
-        sorted_right_pedicle_points         = conv.sorted_points(list(right_pedicle_intersection_points), orientation.r)
-        right_pedicle_medial_point          = sorted_right_pedicle_points[0]
-        right_pedicle_lateral_point         = sorted_right_pedicle_points[-1]
-        right_pedicle_com                   = np.mean(right_pedicle_intersection_points, axis=0)
+        right_geometry                  = conv.clip_plane(geometry, canal_center, orientation.r)
+        right_pedicle_intersection      = conv.cut_sphere(right_geometry, body_front, threshold)
+        right_intersection_com          = np.mean(numpy_support.vtk_to_numpy(right_pedicle_intersection.GetPoints().GetData()), axis=0)
+        right_lr_intersection           = conv.cut_plane(right_pedicle_intersection, right_intersection_com, orientation.s)
+        right_lr_sorted                 = conv.sorted_points(right_lr_intersection, -orientation.r)
+        right_is_intersection           = conv.cut_plane(right_pedicle_intersection, right_intersection_com, orientation.r)
+        right_is_sorted                 = conv.sorted_points(right_is_intersection, orientation.s)
 
         landmarks['canal_center']           = canal_center
         landmarks['body_front']             = body_front
-        landmarks['left_pedicle_medial']    = left_pedicle_medial_point
-        landmarks['right_pedicle_medial']   = right_pedicle_medial_point
-        landmarks['left_pedicle_lateral']   = left_pedicle_lateral_point
-        landmarks['right_pedicle_lateral']  = right_pedicle_lateral_point
-        landmarks['left_pedicle_com']       = left_pedicle_com
-        landmarks['right_pedicle_com']      = right_pedicle_com
-
+        landmarks['left_pedicle_medial']    = np.array(left_lr_sorted[-1])
+        landmarks['right_pedicle_medial']   = np.array(right_lr_sorted[-1])
+        landmarks['left_pedicle_lateral']   = np.array(left_lr_sorted[0])
+        landmarks['right_pedicle_lateral']  = np.array(right_lr_sorted[0])
+        landmarks['left_pedicle_com']       = np.array(left_intersection_com)
+        landmarks['right_pedicle_com']      = np.array(right_intersection_com)
+        landmarks['left_pedicle_superior']  = np.array(left_is_sorted[-1])
+        landmarks['right_pedicle_superior'] = np.array(right_is_sorted[-1])
+        landmarks['left_pedicle_inferior']  = np.array(left_is_sorted[0])
+        landmarks['right_pedicle_inferior'] = np.array(right_is_sorted[0])
 
         return landmarks
     
@@ -190,10 +187,11 @@ class ShapeDecomposition:
             orientation:       SpineLib.Orientation    = None,
             ):
 
-        centerline_lamina = ShapeDecomposition.centerline(processes, landmarks["left_pedicle_medial"], landmarks["right_pedicle_medial"])
+        centerline_lamina = ShapeDecomposition.centerline(processes, landmarks["left_pedicle_com"], landmarks["right_pedicle_com"])
         centerline_lamina_points = centerline_lamina.GetCurvePointsWorld()
         centerline_lamina_points = numpy_support.vtk_to_numpy(centerline_lamina_points.GetData())
         centerline_lamina_samples = [centerline_lamina_points[i] for i in range(0, len(centerline_lamina_points), len(centerline_lamina_points)//6)]
+        process_endpoints = {"TL": [], "ASL": [], "AIL": [], "S": [], "AIR": [], "ASR": [], "TR": []}
         process_endpoints = {"TL":  landmarks["left_pedicle_lateral"],
                              "ASL": centerline_lamina_samples[1],
                              "AIL": centerline_lamina_samples[2],
@@ -202,21 +200,152 @@ class ShapeDecomposition:
                              "ASR": centerline_lamina_samples[5],
                              "TR":  landmarks["right_pedicle_lateral"]}
         
+        
         # segmentation of processes
-        initial_segmented_polydata, process_polydata, process_label_ids, process_points, landmarks = ShapeDecomposition.clustering(processes, orientation, n_clusters=8)
+        initial_segmented_polydata, process_polydata, process_label_ids, process_points, process_landmarks = ShapeDecomposition.clustering(processes, orientation, n_clusters=8)
+
+        for name, point in process_landmarks.items():
+            # find closest centerline_lamina_point to each landmark
+            distances = np.linalg.norm(centerline_lamina_points - point, axis=1)
+            closest_lamina_point = centerline_lamina_points[np.argmin(distances)]
+            process_endpoints[name] = closest_lamina_point
+
+        process_endpoints["TL"] = landmarks["left_pedicle_lateral"]
+        process_endpoints["TR"] = landmarks["right_pedicle_lateral"]
 
         # centerlines
+        centerline_lamina_points = centerline_lamina.GetCurvePointsWorld()
+        centerline_lamina_points = numpy_support.vtk_to_numpy(centerline_lamina_points.GetData())
         centerlines = {"TL": [], "ASL": [], "AIL": [], "S": [], "AIR": [], "ASR": [], "TR": []}
-        for name, point in landmarks.items():
+        for name, point in process_landmarks.items():
+            # find closest centerline_lamina_point to each landmark
+            distances = np.linalg.norm(centerline_lamina_points - point, axis=1)
+            closest_lamina_point = centerline_lamina_points[np.argmin(distances)]
             centerlines[name] = ShapeDecomposition.centerline(geometry, point, process_endpoints[name])
+            #centerlines[name] = ShapeDecomposition.centerline(geometry, point, closest_lamina_point)
         
         # # TODO: for segmenting Lamina
         # centerlines["Lamina"] = centerline_lamina
 
-        segmented_polydata, process_polydata = ShapeDecomposition.centerline_segmentation(initial_segmented_polydata, centerlines)
-        
-        return segmented_polydata, process_polydata, landmarks
 
+        # # centerline pdf points
+
+        # # for name, line in centerlines.items():
+            
+        # controlPoints = np.array(centerlines["TL"].GetCurvePointsWorld().GetData())
+        # SpineLib.SlicerTools.createMarkupsFiducialNode([controlPoints[0]], f"{name}_start")
+
+        # avrg_dists = []
+
+        # for i, point in enumerate(controlPoints):
+        #     matrix = vtk.vtkMatrix4x4()
+        #     centerlines["TL"].GetCurvePointToWorldTransformAtPointIndex(i, matrix)
+        #     z = np.array([matrix.GetElement(0, 2), matrix.GetElement(1, 2), matrix.GetElement(2, 2)])
+        #     intersection = conv.cut_plane(geometry, point, z)
+        #     SpineLib.SlicerTools.createModelNode(intersection, f"{name}_intersection_{i}")
+        #     # add markups plane
+        #     SpineLib.SlicerTools.createMarkupsPlaneNode(point, z, f"{name}_plane_{i}", 20, 20)
+        #     points = np.array([intersection.GetPoint(id_) for id_ in range(intersection.GetNumberOfPoints())])
+        #     distances = np.linalg.norm(points - point, axis=1)
+        #     avrg_dists.append(np.average(distances))
+
+        # print(avrg_dists)
+
+
+
+
+
+
+
+        segmented_polydata, process_polydata = ShapeDecomposition.centerline_segmentation(initial_segmented_polydata, centerlines)
+        # get all centerline curve nodes
+        centerline_nodes = [centerlines[name] for name in process_landmarks.keys()]
+        SpineLib.SlicerTools.removeNodes(centerline_nodes)
+        
+        return segmented_polydata, process_polydata, process_landmarks
+
+    def _pdf_centerline(
+            geometry:          vtk.vtkPolyData         = None,
+            center:            np.array                = None,
+            size:              SpineLib.Size           = None,
+            orientation:       SpineLib.Orientation    = None,
+            ):
+
+        landmark = conv.get_intersection_points(geometry, center, (center + (orientation.a * size.depth)))
+        points = numpy_support.vtk_to_numpy(geometry.GetPoints().GetData())
+        
+        distances = np.linalg.norm(points - landmark, axis=1)
+
+        #average_intersection_distances = [i for ]
+
+        # Calculate the KDE
+        kde = sns.kdeplot(distances, color='skyblue', legend=False)
+        x_vals = kde.get_lines()[0].get_xdata()
+        y_vals = kde.get_lines()[0].get_ydata()
+        
+        # Find extrema points (peaks and valleys)
+        peaks, _ = find_peaks(y_vals)
+        valleys = argrelextrema(y_vals, np.less)[0]
+
+        # Calculate the second derivative of the KDE
+        second_derivative = np.gradient(np.gradient(y_vals, x_vals), x_vals)
+        inflection_points = np.where(np.diff(np.sign(second_derivative)))[0]
+        downward_inflection_points = [point for point in inflection_points if y_vals[point] > y_vals[point + 1]]
+        upward_inflection_points = [point for point in inflection_points if y_vals[point] < y_vals[point + 1]]
+
+        # Filter extrema into minima and maxima
+        minima_points = [valley for valley in valleys if y_vals[valley] < y_vals[valley + 1]]
+        maxima_points = [peak for peak in peaks if y_vals[peak] > y_vals[peak + 1]]
+
+        # Sort maxima by height (descending order)
+        sorted_maxima_indices = np.argsort(y_vals[maxima_points])[::-1]
+        highest_maxima_x = [x_vals[maxima_points[i]] for i in sorted_maxima_indices[:2]]
+
+        # Find the lowest minimum between the maxima (consider edge cases)
+        lowest_min_between_maxima = None
+
+        for min_point in minima_points:
+            # Ensure minimum is strictly between the X values of the maxima
+            
+            if x_vals[min_point] < max(highest_maxima_x) and x_vals[min_point] > min(highest_maxima_x):
+            # Update if lower than current minimum
+                if (lowest_min_between_maxima is None) or (y_vals[min_point] < y_vals[lowest_min_between_maxima]):
+                    lowest_min_between_maxima = min_point
+
+        
+            
+        # Highlight inflection, minima, and maxima points on the plot with different colors
+        plt.ioff()
+        plt.scatter(x_vals[downward_inflection_points], y_vals[downward_inflection_points], color='red', marker='o', label='Downward Inflection Points')
+        plt.scatter(x_vals[upward_inflection_points], y_vals[upward_inflection_points], color='blue', marker='x', label='Upward Inflection Points')
+        plt.scatter(x_vals[minima_points], y_vals[minima_points], color='orange', marker='o', label='Minima Points')
+        plt.scatter(x_vals[maxima_points], y_vals[maxima_points], color='purple', marker='x', label='Maxima Points')
+        if lowest_min_between_maxima is not None:
+            plt.scatter(x_vals[lowest_min_between_maxima], y_vals[lowest_min_between_maxima], marker='s', color='magenta', s=80, label='Pre-Max Minimum')
+        plt.legend()
+
+        #plt.show(block=False)
+        #plt.show()
+            
+        threshold = x_vals[lowest_min_between_maxima]
+        # threshold = x_vals[minima_points[0]]
+        # threshold = x_vals[downward_inflection_points[0]]
+        plt.clf()
+        
+        # segment by filtering polydata
+        vertebral_body = conv.filter_point_ids(geometry, condition=lambda vertex: distances[vertex] > threshold)
+        processes = conv.filter_point_ids(geometry, condition=lambda vertex: distances[vertex] < threshold)
+
+        # # segment by clipping (problem: this adds vertices at the edges of the clipped faces, might trow off the clustering e.g.)
+        # vertebral_body = conv.clip_sphere(geometry, landmark, threshold, InsideOut=True)
+        # processes = conv.clip_sphere(geometry, landmark, threshold)
+        
+        # # plot
+        # narray = np.column_stack((x_vals, y_vals))
+        # chart_node = slicer.util.plot(narray, xColumnIndex=0, title="PDF")
+        # slicer.app.processEvents()
+
+        return threshold, vertebral_body, processes
     
     
 
@@ -372,6 +501,7 @@ class ShapeDecomposition:
 
         except:
             print("Centerline extraction failed")
+
 
         SpineLib.SlicerTools.removeNodes([pointMarkup])
         return centerlineCurveNode
