@@ -24,7 +24,8 @@ class Vertebra:
         if (self.landmarks == None):
             self.geometry       	      = geometry
             self.center                   = np.array(conv.calc_center_of_mass(self.geometry))
-            self.orientation              = Vertebra._init_orientation(self.spineGeometries, self.geometry, self.center, spineOrientation)
+            self.symmetry_plane           = SpineLib.SymmetryPlane.fit_symmetry_plane(geometry=geometry, numIterations=1)    
+            self.orientation              = Vertebra._init_orientation(self.spineGeometries, self.geometry, self.center, spineOrientation, self.symmetry_plane)
             self.body                     = SpineLib.VertebralBody(body=self.geometry, center=self.center, orientation=self.orientation, max_angle=max_angle)
             self.landmarks                = Vertebra._init_landmarks(body=self.body)
         
@@ -43,17 +44,26 @@ class Vertebra:
             spineGeometries: vtk.vtkPolyData,
             geometry: vtk.vtkPolyData,
             center: np.array,
-            spineOrientation: SpineLib.Orientation
+            spineOrientation: SpineLib.Orientation,
+            symmetry_plane: vtk.vtkPlane
             ) -> SpineLib.Orientation:
 
         up_approximator         = SpineLib.UpApproximator(spineGeometries)
-        oriented_bounding_box   = conv.calc_obb(geometry)[1:]
+        #oriented_bounding_box   = conv.calc_obb(geometry)[1:]
+        symmetry_normal         = np.array(symmetry_plane.GetNormal())
 
-        r, flip = conv.closest_vector(oriented_bounding_box, spineOrientation.r)
-        r       = conv.normalize(flip * np.array(r))
+        # r, flip = conv.closest_vector(oriented_bounding_box, spineOrientation.r)
+        # r       = conv.normalize(flip * np.array(r))
+
+        r       = conv.closest_vector([symmetry_normal], spineOrientation.r)
+        r       = conv.normalize(r[0]*r[1])
         s       = up_approximator(center)
         s       = conv.normalize(round(np.dot(s, spineOrientation.s)) * np.array(s))
         a       = conv.normalize(np.cross(s, r))
+
+        print("R: ", r)
+        print("A: ", a)
+        print("S: ", s)
 
         return SpineLib.Orientation(r=r,a=a,s=s)
     
