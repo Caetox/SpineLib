@@ -12,11 +12,13 @@ class Vertebra:
     def __init__(self,
                  spineGeometries:   vtk.vtkPolyData         = None,
                  geometry:          vtk.vtkPolyData         = None,
+                 index:             int                     = None,
                  spineOrientation:  SpineLib.Orientation    = None,
                  max_angle:         float                   = None,
                  landmarks:         SpineLib.Landmarks      = None
                  ) -> None:
         
+        self.index           = index
         self.landmarks       = landmarks
         self.spineGeometries = spineGeometries
 
@@ -32,7 +34,6 @@ class Vertebra:
         self.center                   = np.mean(list(vars(self.landmarks).values()), axis=0)
         self.size, self.orientation   = Vertebra._init_properties(landmarks=self.landmarks)
         self.objectToWorldMatrix      = Vertebra._init_objectToWorldMatrix(self.center, self.size, self.orientation)
-
 
 
     '''
@@ -60,10 +61,6 @@ class Vertebra:
         s       = up_approximator(center)
         s       = conv.normalize(round(np.dot(s, spineOrientation.s)) * np.array(s))
         a       = conv.normalize(np.cross(s, r))
-
-        print("R: ", r)
-        print("A: ", a)
-        print("S: ", s)
 
         return SpineLib.Orientation(r=r,a=a,s=s)
     
@@ -169,7 +166,7 @@ class Vertebra:
     '''
     def get_shape_decomposition(self) -> SpineLib.ShapeDecomposition:
 
-        self.shapeDecomposition = SpineLib.ShapeDecomposition(geometry=self.geometry, center=self.center, size=self.size, orientation=self.orientation)
+        self.shapeDecomposition = SpineLib.ShapeDecomposition(geometry=self.geometry, center=self.center, size=self.size, orientation=self.orientation, index=self.index)
         return self.shapeDecomposition
 
     # '''

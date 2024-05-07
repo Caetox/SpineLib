@@ -11,6 +11,7 @@ class Spine:
 
     def __init__(self,
                  geometries: vtk.vtkPolyData,
+                 indices: np.ndarray,
                  max_angle: float
                  )-> None:
         self.orientation    = self.init_spine_orientation(geometries)
@@ -18,9 +19,10 @@ class Spine:
             SpineLib.Vertebra(
                 spineGeometries=geometries,
                 geometry=g,
+                index=i,
                 spineOrientation=self.orientation,
                 max_angle=max_angle
-                ) for g in geometries]
+                ) for g,i in zip(geometries, indices)]
 
 
     '''
