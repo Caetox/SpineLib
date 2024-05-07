@@ -31,11 +31,12 @@ class ShapeDecomposition:
                  center:            np.array                = None,
                  size:              SpineLib.Size           = None,
                  orientation:       SpineLib.Orientation    = None,
+                 index:             int                     = None,
                  ) -> None:
         
-        self.threshold, self.body, self.processes        = ShapeDecomposition._pdf_decomposition(geometry, center, size, orientation)
-        self.landmarks                                   = ShapeDecomposition._landmarks(geometry, center, size, orientation, self.threshold)
-        self.segmented_processes, self.process_polydata, self.process_landmarks = ShapeDecomposition._segment_processes(geometry, self.processes, self.landmarks, orientation)
+        self.threshold, self.body, self.processes        = ShapeDecomposition._pdf_decomposition(geometry, center, size, orientation, index)
+        self.landmarks                                   = ShapeDecomposition._landmarks(geometry, center, size, orientation, self.threshold, index)
+        self.segmented_processes, self.process_polydata, self.process_landmarks, self.centerlines = ShapeDecomposition._segment_processes(geometry, self.processes, self.landmarks, orientation, index)
 
 
     '''
@@ -48,9 +49,15 @@ class ShapeDecomposition:
             center:            np.array                = None,
             size:              SpineLib.Size           = None,
             orientation:       SpineLib.Orientation    = None,
+            index:             int                     = None,
             ):
 
         landmark = conv.get_intersection_points(geometry, center, (center + (orientation.a * size.depth)))
+        # for cervical spine, take the center of the geometry as landmark
+        if (index >= 17):
+            landmark = (center + landmark) / 2.0
+            #landmark = center
+
         points = numpy_support.vtk_to_numpy(geometry.GetPoints().GetData())
         
         distances = np.linalg.norm(points - landmark, axis=1)
@@ -136,15 +143,20 @@ class ShapeDecomposition:
             size:              SpineLib.Size           = None,
             orientation:       SpineLib.Orientation    = None,
             threshold:         float                   = None,
+            index:             int                     = None,
             ):
         
         landmarks = {}
-        
+
         body_front = conv.get_intersection_points(geometry, center, (center + (orientation.a * size.depth)))
+        if (index >= 17):
+            body_front = (center + body_front) / 2.0
+            #sphere_origin = center
         canal_center = body_front - orientation.a * threshold
 
         left_geometry                   = conv.clip_plane(geometry, canal_center, -orientation.r)
         left_pedicle_intersection       = conv.cut_sphere(left_geometry, body_front, threshold)
+        SpineLib.SlicerTools.createModelNode(left_pedicle_intersection, "left_pedicle_intersection")
         left_intersection_com           = np.mean(numpy_support.vtk_to_numpy(left_pedicle_intersection.GetPoints().GetData()), axis=0)
         left_lr_intersection            = conv.cut_plane(left_pedicle_intersection, left_intersection_com, orientation.s)
         left_lr_sorted                  = conv.sorted_points(left_lr_intersection, orientation.r)
@@ -153,6 +165,7 @@ class ShapeDecomposition:
 
         right_geometry                  = conv.clip_plane(geometry, canal_center, orientation.r)
         right_pedicle_intersection      = conv.cut_sphere(right_geometry, body_front, threshold)
+        SpineLib.SlicerTools.createModelNode(right_pedicle_intersection, "right_pedicle_intersection")
         right_intersection_com          = np.mean(numpy_support.vtk_to_numpy(right_pedicle_intersection.GetPoints().GetData()), axis=0)
         right_lr_intersection           = conv.cut_plane(right_pedicle_intersection, right_intersection_com, orientation.s)
         right_lr_sorted                 = conv.sorted_points(right_lr_intersection, -orientation.r)
@@ -185,6 +198,7 @@ class ShapeDecomposition:
             processes:         vtk.vtkPolyData         = None,
             landmarks:         Dict                    = None,
             orientation:       SpineLib.Orientation    = None,
+            index:             int                     = None,
             ):
 
         centerline_lamina = ShapeDecomposition.centerline(processes, landmarks["left_pedicle_com"], landmarks["right_pedicle_com"])
@@ -202,7 +216,7 @@ class ShapeDecomposition:
         
         
         # segmentation of processes
-        initial_segmented_polydata, process_polydata, process_label_ids, process_points, process_landmarks = ShapeDecomposition.clustering(processes, orientation, n_clusters=8)
+        initial_segmented_polydata, process_polydata, process_label_ids, process_points, process_landmarks = ShapeDecomposition.clustering(processes, orientation, index)
 
         for name, point in process_landmarks.items():
             # find closest centerline_lamina_point to each landmark
@@ -210,8 +224,8 @@ class ShapeDecomposition:
             closest_lamina_point = centerline_lamina_points[np.argmin(distances)]
             process_endpoints[name] = closest_lamina_point
 
-        process_endpoints["TL"] = landmarks["left_pedicle_lateral"]
-        process_endpoints["TR"] = landmarks["right_pedicle_lateral"]
+        # process_endpoints["TL"] = landmarks["left_pedicle_lateral"]
+        # process_endpoints["TR"] = landmarks["right_pedicle_lateral"]
 
         # centerlines
         centerline_lamina_points = centerline_lamina.GetCurvePointsWorld()
@@ -259,10 +273,10 @@ class ShapeDecomposition:
 
         segmented_polydata, process_polydata = ShapeDecomposition.centerline_segmentation(initial_segmented_polydata, centerlines)
         # get all centerline curve nodes
-        centerline_nodes = [centerlines[name] for name in process_landmarks.keys()]
-        SpineLib.SlicerTools.removeNodes(centerline_nodes)
+        #centerline_nodes = [centerlines[name] for name in process_landmarks.keys()]
+        #SpineLib.SlicerTools.removeNodes(centerline_nodes)
         
-        return segmented_polydata, process_polydata, process_landmarks
+        return segmented_polydata, process_polydata, process_landmarks, centerlines
 
     def _pdf_centerline(
             geometry:          vtk.vtkPolyData         = None,
@@ -347,41 +361,151 @@ class ShapeDecomposition:
 
         return threshold, vertebral_body, processes
     
-    
-
-    def clustering(polydata, orientation, n_clusters=8):
-
-        ######################################### CLustering with k means ##############################################################
-        polydata_points = numpy_support.vtk_to_numpy(polydata.GetPoints().GetData())
+    def k_means(points, n_clusters):
         kmeans = KMeans(n_clusters=n_clusters, random_state=0)
-        labels = kmeans.fit_predict(polydata_points)
+        labels = kmeans.fit_predict(points)
         cluster_points = {}
         for label in range(n_clusters):
-            cluster_points[label] = [polydata_points[i] for i, l in enumerate(labels) if l == label]
+            cluster_points[label] = [points[i] for i, l in enumerate(labels) if l == label]
         cluster_centers = kmeans.cluster_centers_
 
+        return labels, cluster_centers
 
-        ######################################### Find process clusters ################################################################
-        process_label_ids = {"TL": [], "ASL": [], "AIL": [], "S": [], "AIR": [], "ASR": [], "TR": []}
 
-        process_label_ids["TL"], tl_cluster_index = ShapeDecomposition.find_cluster_label_ids(labels, cluster_centers, cluster_centers, key=(lambda p: np.array(p).dot(orientation.r)))
-        process_label_ids["TR"], tr_cluster_index = ShapeDecomposition.find_cluster_label_ids(labels, cluster_centers, cluster_centers, key=(lambda p: np.array(p).dot(-orientation.r)))
-        process_label_ids["S"], s_cluster_index   = ShapeDecomposition.find_cluster_label_ids(labels, cluster_centers, cluster_centers, key=(lambda p: np.array(p).dot(orientation.a)))
+    def clustering(polydata, orientation, index):
 
-        # remaining clusters
-        re_cluster_centers = [element for i, element in enumerate(cluster_centers) if i not in [tl_cluster_index, tr_cluster_index, s_cluster_index]]
-        central_center = sorted(re_cluster_centers, key=(lambda p: np.array(p).dot(orientation.r)))[len(re_cluster_centers)//2]
-        central_cluster_index = np.where(np.all(cluster_centers == central_center, axis=1))[0][0]
-        re_cluster_centers = [element for i, element in enumerate(cluster_centers) if i not in [tl_cluster_index, tr_cluster_index, s_cluster_index, central_cluster_index]]
+        print(f"Index: {index}")
+        polydata_points = numpy_support.vtk_to_numpy(polydata.GetPoints().GetData())
+        process_label_ids = {}
+        landmarks = {}
 
-        superior_clusters = sorted(re_cluster_centers, key=(lambda p: np.array(p).dot(orientation.s)), reverse=True)[:2]
-        inferior_clusters = sorted(re_cluster_centers, key=(lambda p: np.array(p).dot(-orientation.s)), reverse=True)[:2]
+        # thoracic and lumbar spine w/out T12
+        if (index < 17 and index != 5):
 
-        process_label_ids["ASL"], asl_cluster_index = ShapeDecomposition.find_cluster_label_ids(labels, cluster_centers, superior_clusters, key=(lambda p: np.array(p).dot(orientation.r)))
-        process_label_ids["ASR"], asr_cluster_index = ShapeDecomposition.find_cluster_label_ids(labels, cluster_centers, superior_clusters, key=(lambda p: np.array(p).dot(-orientation.r)))
-        process_label_ids["AIL"], ail_cluster_index = ShapeDecomposition.find_cluster_label_ids(labels, cluster_centers, inferior_clusters, key=(lambda p: np.array(p).dot(orientation.r)))
-        process_label_ids["AIR"], air_cluster_index = ShapeDecomposition.find_cluster_label_ids(labels, cluster_centers, inferior_clusters, key=(lambda p: np.array(p).dot(-orientation.r)))
+            labels, cluster_centers = ShapeDecomposition.k_means(polydata_points, 8)
 
+            ######################################### Find process clusters ################################################################
+
+            process_label_ids["TL"], tl_cluster_index = ShapeDecomposition.find_cluster_label_ids(labels, cluster_centers, cluster_centers, key=(lambda p: np.array(p).dot(orientation.r)))
+            process_label_ids["TR"], tr_cluster_index = ShapeDecomposition.find_cluster_label_ids(labels, cluster_centers, cluster_centers, key=(lambda p: np.array(p).dot(-orientation.r)))
+            process_label_ids["S"], s_cluster_index   = ShapeDecomposition.find_cluster_label_ids(labels, cluster_centers, cluster_centers, key=(lambda p: np.array(p).dot(orientation.a)))
+
+            # remaining clusters
+            re_cluster_centers = [element for i, element in enumerate(cluster_centers) if i not in [tl_cluster_index, tr_cluster_index, s_cluster_index]]
+            central_center = sorted(re_cluster_centers, key=(lambda p: np.array(p).dot(orientation.r)))[len(re_cluster_centers)//2]
+            central_cluster_index = np.where(np.all(cluster_centers == central_center, axis=1))[0][0]
+            re_cluster_centers = [element for i, element in enumerate(cluster_centers) if i not in [tl_cluster_index, tr_cluster_index, s_cluster_index, central_cluster_index]]
+
+            superior_clusters = sorted(re_cluster_centers, key=(lambda p: np.array(p).dot(orientation.s)), reverse=True)[:2]
+            inferior_clusters = sorted(re_cluster_centers, key=(lambda p: np.array(p).dot(-orientation.s)), reverse=True)[:2]
+
+            process_label_ids["ASL"], asl_cluster_index = ShapeDecomposition.find_cluster_label_ids(labels, cluster_centers, superior_clusters, key=(lambda p: np.array(p).dot(orientation.r)))
+            process_label_ids["ASR"], asr_cluster_index = ShapeDecomposition.find_cluster_label_ids(labels, cluster_centers, superior_clusters, key=(lambda p: np.array(p).dot(-orientation.r)))
+            process_label_ids["AIL"], ail_cluster_index = ShapeDecomposition.find_cluster_label_ids(labels, cluster_centers, inferior_clusters, key=(lambda p: np.array(p).dot(orientation.r)))
+            process_label_ids["AIR"], air_cluster_index = ShapeDecomposition.find_cluster_label_ids(labels, cluster_centers, inferior_clusters, key=(lambda p: np.array(p).dot(-orientation.r)))
+
+            ######################### Find landmarks #################################################################################
+            process_points = {}
+            for name in process_label_ids.keys():
+                process_points[name] = [polydata_points[i] for i in process_label_ids[name]]
+
+            
+            # lumbar spine
+            if(index <= 4):
+                landmarks["ASL"] = sorted(process_points["ASL"], key=(lambda p: np.array(p).dot(np.average([orientation.s, -orientation.a, -orientation.r], axis=0))))[-1]
+                landmarks["ASR"] = sorted(process_points["ASR"], key=(lambda p: np.array(p).dot(np.average([orientation.s, -orientation.a, orientation.r], axis=0))))[-1]
+                landmarks["AIL"] = sorted(process_points["AIL"], key=(lambda p: np.array(p).dot(np.average([orientation.s], axis=0))))[0]
+                landmarks["AIR"] = sorted(process_points["AIR"], key=(lambda p: np.array(p).dot(np.average([orientation.s], axis=0))))[0]
+                landmarks["S"]   = sorted(process_points["S"], key=(lambda p: np.array(p).dot(orientation.a)))[0]
+                landmarks["TL"]  = sorted(process_points["TL"], key=(lambda p: np.array(p).dot(orientation.r)))[0]
+                landmarks["TR"]  = sorted(process_points["TR"], key=(lambda p: np.array(p).dot(orientation.r)))[-1]
+
+            # thoracic spine
+            else:
+                landmarks["ASL"] = sorted(process_points["ASL"], key=(lambda p: np.array(p).dot(np.average([orientation.s], axis=0))))[-1]
+                landmarks["ASR"] = sorted(process_points["ASR"], key=(lambda p: np.array(p).dot(np.average([orientation.s], axis=0))))[-1]
+                landmarks["AIL"] = sorted(process_points["AIL"], key=(lambda p: np.array(p).dot(np.average([-orientation.s, orientation.a, -orientation.r], axis=0))))[-1]
+                landmarks["AIR"] = sorted(process_points["AIR"], key=(lambda p: np.array(p).dot(np.average([-orientation.s, orientation.a, orientation.r], axis=0))))[-1]
+                landmarks["S"]   = sorted(process_points["S"], key=(lambda p: np.array(p).dot(orientation.a)))[0]
+                landmarks["TL"]  = sorted(process_points["TL"], key=(lambda p: np.array(p).dot(orientation.r)))[0]
+                landmarks["TR"]  = sorted(process_points["TR"], key=(lambda p: np.array(p).dot(orientation.r)))[-1]
+
+
+        # thoracic spine T12
+        elif (index == 5):
+            labels, cluster_centers = ShapeDecomposition.k_means(polydata_points, 5)
+
+            ######################################### Find process clusters ################################################################
+            process_label_ids["S"], s_cluster_index   = ShapeDecomposition.find_cluster_label_ids(labels, cluster_centers, cluster_centers, key=(lambda p: np.array(p).dot(orientation.a)))
+            re_cluster_centers = [element for i, element in enumerate(cluster_centers) if i not in [s_cluster_index]]
+
+            superior_clusters = sorted(re_cluster_centers, key=(lambda p: np.array(p).dot(orientation.s)), reverse=True)[:2]
+            inferior_clusters = sorted(re_cluster_centers, key=(lambda p: np.array(p).dot(-orientation.s)), reverse=True)[:2]
+
+            process_label_ids["ASL"], asl_cluster_index = ShapeDecomposition.find_cluster_label_ids(labels, cluster_centers, superior_clusters, key=(lambda p: np.array(p).dot(orientation.r)))
+            process_label_ids["ASR"], asr_cluster_index = ShapeDecomposition.find_cluster_label_ids(labels, cluster_centers, superior_clusters, key=(lambda p: np.array(p).dot(-orientation.r)))
+            process_label_ids["AIL"], ail_cluster_index = ShapeDecomposition.find_cluster_label_ids(labels, cluster_centers, inferior_clusters, key=(lambda p: np.array(p).dot(orientation.r)))
+            process_label_ids["AIR"], air_cluster_index = ShapeDecomposition.find_cluster_label_ids(labels, cluster_centers, inferior_clusters, key=(lambda p: np.array(p).dot(-orientation.r)))
+            
+
+            ######################### Find landmarks #################################################################################
+            process_points = {}
+            for name in process_label_ids.keys():
+                process_points[name] = [polydata_points[i] for i in process_label_ids[name]]
+        
+            else:
+                landmarks["S"]   = sorted(process_points["S"], key=(lambda p: np.array(p).dot(orientation.a)))[0]
+                landmarks["ASL"] = sorted(process_points["ASL"], key=(lambda p: np.array(p).dot(orientation.s)))[-1]
+                landmarks["ASR"] = sorted(process_points["ASR"], key=(lambda p: np.array(p).dot(orientation.s)))[-1]
+                landmarks["AIL"] = sorted(process_points["AIL"], key=(lambda p: np.array(p).dot(np.average([-orientation.s, -orientation.r], axis=0))))[-1]
+                landmarks["AIR"] = sorted(process_points["AIR"], key=(lambda p: np.array(p).dot(np.average([-orientation.s, orientation.r], axis=0))))[-1]
+                landmarks["TL"]  = sorted(process_points["ASL"], key=(lambda p: np.array(p).dot(np.average([-orientation.a, -orientation.r], axis=0))))[-1]
+                landmarks["TR"]  = sorted(process_points["ASR"], key=(lambda p: np.array(p).dot(np.average([-orientation.a, orientation.r], axis=0))))[-1]
+
+
+        # cervical spine
+        else:
+            labels, cluster_centers = ShapeDecomposition.k_means(polydata_points, 3)
+
+            ######################################### Find process clusters ################################################################
+
+            process_label_ids["S"], s_cluster_index   = ShapeDecomposition.find_cluster_label_ids(labels, cluster_centers, cluster_centers, key=(lambda p: np.array(p).dot(orientation.a)))
+            re_cluster_centers = [element for i, element in enumerate(cluster_centers) if i not in [s_cluster_index]]
+            process_label_ids["L"], l_cluster_index = ShapeDecomposition.find_cluster_label_ids(labels, cluster_centers, re_cluster_centers, key=(lambda p: np.array(p).dot(orientation.r)))
+            process_label_ids["R"], r_cluster_index = ShapeDecomposition.find_cluster_label_ids(labels, cluster_centers, re_cluster_centers, key=(lambda p: np.array(p).dot(-orientation.r)))
+            
+
+            ######################### Find landmarks #################################################################################
+            process_points = {}
+            for name in process_label_ids.keys():
+                process_points[name] = [polydata_points[i] for i in process_label_ids[name]]
+
+
+            # cervical spine
+            if (index !=5):
+                landmarks["S"]   = sorted(process_points["S"], key=(lambda p: np.array(p).dot(orientation.a)))[0]
+                landmarks["ASL"] = sorted(process_points["L"], key=(lambda p: np.array(p).dot(orientation.s)))[-1]
+                landmarks["ASR"] = sorted(process_points["R"], key=(lambda p: np.array(p).dot(orientation.s)))[-1]
+                landmarks["AIL"] = sorted(process_points["L"], key=(lambda p: np.array(p).dot(orientation.s)))[0]
+                landmarks["AIR"] = sorted(process_points["R"], key=(lambda p: np.array(p).dot(orientation.s)))[0]
+                landmarks["TL"]  = sorted(process_points["L"], key=(lambda p: np.array(p).dot(orientation.a)))[-1]
+                landmarks["TR"]  = sorted(process_points["R"], key=(lambda p: np.array(p).dot(orientation.a)))[-1]
+            
+
+        # # landmarks markup
+        # markup = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsFiducialNode', "Landmarks")
+        # markup.GetDisplayNode().SetTextScale(0.0)
+        # markup.GetDisplayNode().SetSelectedColor(1, 0, 0)
+        # for name, point in landmarks.items():
+        #     markup.AddFiducialFromArray(point)
+
+        # SpineLib.SlicerTools.createMarkupsFiducialNode(cluster_centers, "ClusterCenters")
+
+
+        ############################# Filter polydata ###########################################################################
+        process_polydatas = {}
+        for name in process_label_ids.keys():
+            process_polydatas[name] = conv.filter_point_ids(polydata, condition=lambda vertex: vertex not in process_label_ids[name])
 
         ############################## Add label Scalar to polydata ####################################################################
         new_labels = np.zeros(len(labels))
@@ -397,41 +521,10 @@ class ShapeDecomposition:
             vtk_labels.InsertNextValue(l)
 
         polydata.GetPointData().SetScalars(vtk_labels)
-
-        ############################# Filter polydata ###########################################################################
-        process_polydatas = {}
-        for name in process_label_ids.keys():
-            process_polydatas[name] = conv.filter_point_ids(polydata, condition=lambda vertex: vertex not in process_label_ids[name])
-
-        ######################### Find landmarks #################################################################################
-        process_points = {}
-        for name in process_label_ids.keys():
-            process_points[name] = [polydata_points[i] for i in process_label_ids[name]]
-
-        landmarks = {"TL": [], "ASL": [], "AIL": [], "S": [], "AIR": [], "ASR": [], "TR": []}
-        #landmarks["ASL"] = sorted(process_points["ASL"], key=(lambda p: np.array(p).dot(np.average([orientation.s, -orientation.a, -orientation.r], axis=0))))[-1]
-        landmarks["ASL"] = sorted(process_points["ASL"], key=(lambda p: np.array(p).dot(np.average([orientation.s], axis=0))))[-1]
-        #landmarks["ASR"] = sorted(process_points["ASR"], key=(lambda p: np.array(p).dot(np.average([orientation.s, -orientation.a, orientation.r], axis=0))))[-1]
-        landmarks["ASR"] = sorted(process_points["ASR"], key=(lambda p: np.array(p).dot(np.average([orientation.s], axis=0))))[-1]
-        landmarks["AIL"] = sorted(process_points["AIL"], key=(lambda p: np.array(p).dot(np.average([-orientation.s, -orientation.a, -orientation.r], axis=0))))[-1]
-        #landmarks["AIL"] = sorted(process_points["AIL"], key=(lambda p: np.array(p).dot(np.average([orientation.s], axis=0))))[0]
-        landmarks["AIR"] = sorted(process_points["AIR"], key=(lambda p: np.array(p).dot(np.average([-orientation.s, -orientation.a, orientation.r], axis=0))))[-1]
-        #landmarks["AIR"] = sorted(process_points["AIR"], key=(lambda p: np.array(p).dot(np.average([orientation.s], axis=0))))[0]
-        landmarks["S"]   = sorted(process_points["S"], key=(lambda p: np.array(p).dot(orientation.a)))[0]
-        landmarks["TL"]  = sorted(process_points["TL"], key=(lambda p: np.array(p).dot(orientation.r)))[0]
-        landmarks["TR"]  = sorted(process_points["TR"], key=(lambda p: np.array(p).dot(orientation.r)))[-1]
+        ####################################################################################################################################
 
 
-        # test_landmarks = {}
-        # for name, points in process_points.items():
-        #     points = np.array(points)
-        #     mean = points.mean(axis=0)
-        #     _1, _2, eigenvector = np.linalg.svd(points - mean)
-        #     main_component = eigenvector[0]
-        #     main_component_line_markup = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsLineNode', f"{name}_main_component")
-        #     main_component_line_markup.SetLineStartPosition(mean)
-        #     main_component_line_markup.SetLineEndPosition(mean + 100*main_component)
-        #     #test_landmarks[name] = conv.cut_sphere(polydata, point, 2)
+
 
         return polydata, process_polydatas, process_label_ids, process_points, landmarks
     
