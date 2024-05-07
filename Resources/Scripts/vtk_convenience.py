@@ -14,6 +14,7 @@ import numpy as np
 import pyvista as pv
 import pyacvd
 from vtk.util import numpy_support
+import pyvista
 
 # pylint: disable=no-name-in-module
 from vtk import (
@@ -630,6 +631,12 @@ def find_closest_point_id(polydata, point):
     closestPointId = locator.FindClosestPoint(point)
 
     return closestPointId
+
+def find_closest_points(polydata, points):
+    py_mesh = pyvista.PolyData(polydata)
+    closest_cells, closest_points = py_mesh.find_closest_cell(points, return_closest_point=True)
+
+    return closest_points
 
 
 def runDijkstra(polydata, point1, point2):
