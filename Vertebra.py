@@ -21,6 +21,7 @@ class Vertebra:
         self.index           = index
         self.landmarks       = landmarks
         self.spineGeometries = spineGeometries
+        self.ligament_landmarks = {}
 
         # calculate landmarks, if not provided
         if (self.landmarks == None):

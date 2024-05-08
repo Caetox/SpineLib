@@ -7,33 +7,34 @@ from vtk.util import numpy_support
 from typing import Dict, Tuple
 import slicer
 import SpineLib
-import pyvista
+import traceback
 
 
 class LigamentLandmarks:   
 
     def __init__(self,
                  spine:            SpineLib.Spine           = None,
-                 spine_indices:    np.ndarray               = None,
                  ) -> None:
         
         try:
-            self.all_pll    = LigamentLandmarks._detect_all_pll(spine, spine_indices)
-            self.CL 	    = LigamentLandmarks._detect_CL(spine, spine_indices)
-            self.ISL        = LigamentLandmarks._detect_ISL(spine, spine_indices)
-            self.LF         = LigamentLandmarks._detect_LF(spine, spine_indices)
-            self.ITL        = LigamentLandmarks._detect_ITL(spine, spine_indices)
-            self.SSL        = LigamentLandmarks._detect_SSL(spine, spine_indices)
+            self._detect_ALL_PLL(spine)
+            self._detect_CL(spine)
+            self._detect_ISL(spine)
+            self._detect_LF(spine)
+            self._detect_ITL(spine) 
+            self._detect_SSL(spine)
 
         except Exception as e:
             print(e)
             print("Error in LigamentLandmarks")
+            traceback.print_exc()
             return None
+        
 
     '''
     Detect intertransverse ligament landmarks
     '''
-    def _detect_ITL(spine: SpineLib.Spine, spine_indices: np.ndarray) -> Dict[int, np.ndarray]:
+    def _detect_ITL(self, spine: SpineLib.Spine):
             
         for vt, vertebra in enumerate(spine.vertebrae):
             
@@ -48,26 +49,32 @@ class LigamentLandmarks:
             ITL_landmarks = [left_ITL, right_ITL]
             markupNode = SpineLib.SlicerTools.createMarkupsFiducialNode(ITL_landmarks, "ITL", color=[0.5, 0, 0.75])
 
+            vertebra.ligament_landmarks["ITL"] = ITL_landmarks
+
+
     '''
     Detect supraspinous ligament landmarks
     '''
-    def _detect_SSL(spine: SpineLib.Spine, spine_indices: np.ndarray) -> Dict[int, np.ndarray]:
+    def _detect_SSL(self, spine: SpineLib.Spine):
         
         for vt, vertebra in enumerate(spine.vertebrae):
             SSL_landmark = vertebra.shapeDecomposition.process_landmarks["S"]
             markupNode = SpineLib.SlicerTools.createMarkupsFiducialNode([SSL_landmark], "SSL", color=[0.5, 0, 0.25])
+
+            vertebra.ligament_landmarks["SSL"] = [SSL_landmark]
+
         
     '''
     Detect anterior longitudinal ligament (ALL) and posterior longitudinal ligament (PLL) landmarks
     '''
-    def _detect_all_pll(spine: SpineLib.Spine, spine_indices: np.ndarray) -> Dict[int, np.ndarray]:
+    def _detect_ALL_PLL(self, spine: SpineLib.Spine):
         
         for vt, vertebra in enumerate(spine.vertebrae):
 
             factor_cervical = 0.2
             factor_thor_lumbar = 0.1
 
-            if (spine_indices[vt] >= 17):
+            if (vertebra.index >= 17):
                 factor = factor_cervical
             else:
                 factor = factor_thor_lumbar
@@ -93,6 +100,9 @@ class LigamentLandmarks:
             sup_all_curve = SpineLib.SlicerTools.createResampledCurve(sorted_anterior, 7, name="ALL", color=[1, 0, 0])
             sup_pll_curve = SpineLib.SlicerTools.createResampledCurve(sorted_posterior, 7, name="PLL", color=[1, 0, 0])
 
+            sup_all = slicer.util.arrayFromMarkupsControlPoints(sup_all_curve)
+            sup_pll = slicer.util.arrayFromMarkupsControlPoints(sup_pll_curve)
+
 
             # inferior landmarks
             inferior_boundary = conv.extractBoundary(vertebra.body.inferior_endplate)
@@ -106,6 +116,21 @@ class LigamentLandmarks:
 
             inf_all_curve = SpineLib.SlicerTools.createResampledCurve(sorted_anterior, 7, name="ALL", color=[1, 0, 0])
             inf_pll_curve = SpineLib.SlicerTools.createResampledCurve(sorted_posterior, 7, name="PLL", color=[1, 0, 0])
+
+            inf_all = slicer.util.arrayFromMarkupsControlPoints(inf_all_curve)
+            inf_pll = slicer.util.arrayFromMarkupsControlPoints(inf_pll_curve)
+
+            SpineLib.SlicerTools.removeNodes([sup_all_curve, sup_pll_curve, inf_all_curve, inf_pll_curve])
+
+            ALL_landmarks = np.concatenate((sup_all, inf_all))
+            PLL_landmarks = np.concatenate((sup_pll, inf_pll))
+
+            SpineLib.SlicerTools.createMarkupsFiducialNode(ALL_landmarks, "ALL", color=[0.5, 0, 0.75])
+            SpineLib.SlicerTools.createMarkupsFiducialNode(PLL_landmarks, "PLL", color=[0.5, 0, 0.75])
+
+            vertebra.ligament_landmarks["ALL"] = ALL_landmarks
+            vertebra.ligament_landmarks["PLL"] = PLL_landmarks
+
 
             
 
@@ -128,7 +153,7 @@ class LigamentLandmarks:
     '''
     Project points onto plane
     '''
-    def project_points(points, plane_center, plane_normal):
+    def project_points(self, points, plane_center, plane_normal):
             
             plane_normal = plane_normal / np.linalg.norm(plane_normal)
             projected_points = []
@@ -141,7 +166,7 @@ class LigamentLandmarks:
     '''
     Detect facet joint landmarks
     '''
-    def _detect_CL(spine: SpineLib.Spine, spine_indices: np.ndarray) -> Dict[int, np.ndarray]:
+    def _detect_CL(self, spine: SpineLib.Spine):
 
         for inferior_vertebra, superior_vertebra in zip(spine.vertebrae, spine.vertebrae[1:]):
 
@@ -149,7 +174,7 @@ class LigamentLandmarks:
             sup_AI_polydatas  = [superior_vertebra.shapeDecomposition.process_polydata["AIL"], superior_vertebra.shapeDecomposition.process_polydata["AIR"]]
             medial_directions = [inferior_vertebra.orientation.r, -inferior_vertebra.orientation.r]
 
-            for inf_AS_polydata, sup_AI_polydata, medial_direction in zip(inf_AS_polydatas, sup_AI_polydatas, medial_directions):
+            for inf_AS_polydata, sup_AI_polydata, medial_direction, side in zip(inf_AS_polydatas, sup_AI_polydatas, medial_directions, ["left", "right"]):
 
                 # get facet contact polydata
                 inf_contact_polydata = conv.get_contact_polydata(sup_AI_polydata, inf_AS_polydata)
@@ -186,6 +211,20 @@ class LigamentLandmarks:
                 facet_up = u - proj_of_u_on_n
                 facet_medial = normal
                 facet_LR = np.cross(facet_up, facet_medial)
+                # facet_medial = conv.closest_vector([facet_LR], medial_direction)
+                # print("............")
+                # print("Facet LR: ", facet_LR)
+                # print("Facet medial: ", facet_medial)
+                # if (facet_medial[1] != 0):
+                #     facet_medial = conv.normalize(facet_medial[0]*facet_medial[1])
+                # else:
+                #     facet_medial = conv.normalize(facet_medial[0])
+                #     print("its zero")
+
+                #facet_medial = facet_LR if np.dot(facet_LR, medial_direction) >= np.dot(-facet_LR, medial_direction) else -facet_LR
+                facet_medial = facet_LR if np.dot(facet_LR, medial_direction) >= 0 else -facet_LR
+
+                print("Facet medial: ", facet_medial)
 
                 # # projected points
                 # lr_sorted = conv.sorted_points(list(inf_contact_points_projected_up), facet_LR)
@@ -216,10 +255,10 @@ class LigamentLandmarks:
                 # SpineLib.SlicerTools.createModelNode(inf_facet_polydata, "Facet", color=[1.0, 0.0, 0.0], opacity=0.7)
 
                 lr_intersection = conv.cut_plane(inf_contact_polydata, inf_facet_center, facet_up)
-                lr_sorted = conv.sorted_points(lr_intersection, facet_LR)
+                lr_sorted = conv.sorted_points(lr_intersection, facet_medial)
                 lr_1 = lr_sorted[0]
                 lr_2 = lr_sorted[-1]
-                is_intersection = conv.cut_plane(inf_contact_polydata, inf_facet_center, facet_LR)
+                is_intersection = conv.cut_plane(inf_contact_polydata, inf_facet_center, facet_medial)
                 is_sorted = conv.sorted_points(is_intersection, facet_up)
                 is_1 = is_sorted[0]
                 is_2 = is_sorted[-1]
@@ -234,10 +273,10 @@ class LigamentLandmarks:
                 #SpineLib.SlicerTools.createModelNode(sup_facet_polydata, "Facet", color=[1.0, 0.0, 0.0], opacity=0.7)
 
                 lr_intersection = conv.cut_plane(sup_contact_polydata, sup_facet_center, facet_up)
-                lr_sorted = conv.sorted_points(lr_intersection, facet_LR)
+                lr_sorted = conv.sorted_points(lr_intersection, facet_medial)
                 lr_1 = lr_sorted[0]
                 lr_2 = lr_sorted[-1]
-                is_intersection = conv.cut_plane(sup_contact_polydata, sup_facet_center, facet_LR)
+                is_intersection = conv.cut_plane(sup_contact_polydata, sup_facet_center, facet_medial)
                 is_sorted = conv.sorted_points(is_intersection, facet_up)
                 is_1 = is_sorted[0]
                 is_2 = is_sorted[-1]
@@ -245,13 +284,11 @@ class LigamentLandmarks:
                 sup_ligament_landmarks = [lr_1, lr_2, is_1, is_2]
                 sup_ligament_markup = SpineLib.SlicerTools.createMarkupsFiducialNode(sup_ligament_landmarks, "SuperiorVertebraLigamentLandmarks", color=[0, 1, 1])
 
+                inferior_vertebra.ligament_landmarks["CL_" + side + "_sup"] = inf_ligament_landmarks
+                superior_vertebra.ligament_landmarks["CL_" + side + "_inf"] = sup_ligament_landmarks
 
-
-                # # get closest points on superior facet to the inferior facet landmarks
-                # sup_ligament_landmarks = [sorted(sup_AI_points, key=lambda p: np.linalg.norm(p - lm))[0] for lm in inf_ligament_landmarks]
-                # sup_ligament_markup = SpineLib.SlicerTools.createMarkupsFiducialNode(sup_ligament_landmarks, "SuperiorVertebraLigamentLandmarks", color=[0, 1, 1])
-
-
+            
+  
 
         # for vt, vertebra in enumerate(spine.vertebrae):
 
@@ -266,7 +303,7 @@ class LigamentLandmarks:
         # return facet_landmarks
 
     
-    def _detect_ISL(spine: SpineLib.Spine, spine_indices: np.ndarray):
+    def _detect_ISL(self, spine: SpineLib.Spine):
         
         for vt, vertebra in enumerate(spine.vertebrae):
             
@@ -309,10 +346,15 @@ class LigamentLandmarks:
             SpineLib.SlicerTools.removeNodes([superior_curveNode, inferior_curveNode])
 
             superior_ISL = conv.find_closest_points(spinous_polydata, superior_ISL_samples)
-            inferior_ISL = conv.find_closest_points(spinous_polydata, inferior_ISL_samples) 
+            inferior_ISL = conv.find_closest_points(spinous_polydata, inferior_ISL_samples)
+
+            ISL_landmarks = np.concatenate((superior_ISL, inferior_ISL))
 
             SpineLib.SlicerTools.createMarkupsFiducialNode(superior_ISL, "Superior_ISL", color=[0.0, 0.0, 1.0])
             SpineLib.SlicerTools.createMarkupsFiducialNode(inferior_ISL, "Inferior_ISL", color=[0.0, 0.0, 1.0])
+
+            vertebra.ligament_landmarks["ISL"] = ISL_landmarks
+
 
 
 
@@ -350,19 +392,46 @@ class LigamentLandmarks:
             # # find closest points on polydata to the curve
 
 
+    def flavum_curve(self, vertebra, left_keypoint, right_keypoint):
 
+        polydata = vertebra.shapeDecomposition.processes
+
+        # run dijkstra
+        flavum_curvePoints = conv.runDijkstra(polydata, np.array(left_keypoint), np.array(right_keypoint))
+
+        # clip to left and right
+        parametricSpline = vtk.vtkParametricSpline()
+        parametricSpline.SetPoints(flavum_curvePoints)
+        parametricFunctionSource = vtk.vtkParametricFunctionSource()
+        parametricFunctionSource.SetParametricFunction(parametricSpline)
+        parametricFunctionSource.Update()
+
+        # left half
+        left_clipped = conv.clip_plane(parametricFunctionSource.GetOutput(), vertebra.center, -vertebra.orientation.r)
+        right_clipped = conv.clip_plane(parametricFunctionSource.GetOutput(), vertebra.center, vertebra.orientation.r)
+        left_flavum_Points = numpy_support.vtk_to_numpy(left_clipped.GetPoints().GetData())
+        right_flavum_Points = numpy_support.vtk_to_numpy(right_clipped.GetPoints().GetData())
+        left_flavum_curve = SpineLib.SlicerTools.createResampledCurve(left_flavum_Points, 7, name="FlavumCurve", color=[1, 0, 1])
+        right_flavum_curve = SpineLib.SlicerTools.createResampledCurve(right_flavum_Points, 7, name="FlavumCurve", color=[1, 0, 1])
+        left_flavum_Points = slicer.util.arrayFromMarkupsControlPoints(left_flavum_curve)[1:-1]
+        right_flavum_Points = slicer.util.arrayFromMarkupsControlPoints(right_flavum_curve)[1:-1]
+        flavum_points = np.concatenate((left_flavum_Points, right_flavum_Points))
+
+        SpineLib.SlicerTools.removeNodes([left_flavum_curve, right_flavum_curve])
+
+        return flavum_points
 
     '''
     Detect ligamentum flavum landmarks
     '''
-    def _detect_LF(spine: SpineLib.Spine, spine_indices: np.ndarray) -> Dict[int, np.ndarray]:
+    def _detect_LF(self, spine: SpineLib.Spine):
 
         for vt, vertebra in enumerate(spine.vertebrae):
             
             factor_cervical = 0.4
             factor_thor_lumbar = 0.2
 
-            if (spine_indices[vt] >= 17):
+            if (vertebra.index >= 17):
                 factor = factor_cervical
             else:
                 factor = factor_thor_lumbar
@@ -373,35 +442,33 @@ class LigamentLandmarks:
             canal_vector = right_medial - left_medial
             left_origin = left_medial + factor * canal_vector
             right_origin = right_medial - factor * canal_vector
-            polydata = vertebra.shapeDecomposition.processes
 
-            # run dijkstra
-            flavum_curvePoints = conv.runDijkstra(polydata, np.array(left_medial), np.array(right_medial))
+            # CL_landmarks :-> [ CL_inf_l, CL_sup_l, CL_inf_r, CL_sup_r ]
+
+            #print("Index: ", vertebra.index)
+
+            # upper flavum curve
+            if "CL_left_sup" in vertebra.ligament_landmarks and "CL_right_sup" in vertebra.ligament_landmarks:
+                left_keypoint = vertebra.ligament_landmarks["CL_left_sup"][1]
+                right_keypoint = vertebra.ligament_landmarks["CL_right_sup"][1]
+                upper_flavum_points = self.flavum_curve(vertebra, left_keypoint, right_keypoint)
+                SpineLib.SlicerTools.createMarkupsFiducialNode(upper_flavum_points, "Ligamentum Flavum", color=[0.5, 0, 0.25])
+                vertebra.ligament_landmarks["LF_sup"] = upper_flavum_points   
+            
+
+            # lower flavum curve
+            if "CL_left_inf" in vertebra.ligament_landmarks and "CL_right_inf" in vertebra.ligament_landmarks:
+                left_keypoint = vertebra.ligament_landmarks["CL_left_inf"][1]
+                right_keypoint = vertebra.ligament_landmarks["CL_right_inf"][1]
+                lower_flavum_points = self.flavum_curve(vertebra, left_keypoint, right_keypoint)
+                SpineLib.SlicerTools.createMarkupsFiducialNode(lower_flavum_points, "Ligamentum Flavum", color=[0.5, 0, 0.25])
+                vertebra.ligament_landmarks["LF_inf"] = lower_flavum_points
 
 
-            # clip to left and right
-            parametricSpline = vtk.vtkParametricSpline()
-            parametricSpline.SetPoints(flavum_curvePoints)
-            parametricFunctionSource = vtk.vtkParametricFunctionSource()
-            parametricFunctionSource.SetParametricFunction(parametricSpline)
-            parametricFunctionSource.Update()
-
-            # left half
-            left_clipped = conv.clip_plane(parametricFunctionSource.GetOutput(), vertebra.center, -vertebra.orientation.r)
-            right_clipped = conv.clip_plane(parametricFunctionSource.GetOutput(), vertebra.center, vertebra.orientation.r)
-
-            left_flavum_Points = numpy_support.vtk_to_numpy(left_clipped.GetPoints().GetData())
-            right_flavum_Points = numpy_support.vtk_to_numpy(right_clipped.GetPoints().GetData())
-
-            left_flavum_curve = SpineLib.SlicerTools.createResampledCurve(left_flavum_Points, 7, name="FlavumCurve", color=[1, 0, 1])
-            right_flavum_curve = SpineLib.SlicerTools.createResampledCurve(right_flavum_Points, 7, name="FlavumCurve", color=[1, 0, 1])
-
-            left_flavum_Points = slicer.util.arrayFromMarkupsControlPoints(left_flavum_curve)[1:-1]
-            right_flavum_Points = slicer.util.arrayFromMarkupsControlPoints(right_flavum_curve)[1:-1]
 
             
-            slicer.util.updateMarkupsControlPointsFromArray(left_flavum_curve, np.array(left_flavum_Points))
-            slicer.util.updateMarkupsControlPointsFromArray(right_flavum_curve, np.array(right_flavum_Points))
+            # slicer.util.updateMarkupsControlPointsFromArray(left_flavum_curve, np.array(left_flavum_Points))
+            # slicer.util.updateMarkupsControlPointsFromArray(right_flavum_curve, np.array(right_flavum_Points))
 
 
 
@@ -447,5 +514,3 @@ class LigamentLandmarks:
             # flavum_markupsNode = SpineLib.SlicerTools.createMarkupsFiducialNode(flavum_landmarks, "FlavumLandmarks", color=[1, 0, 0])
 
             # SpineLib.SlicerTools.createResampledCurve(flavum_landmarks, 7, name="FlavumCurve", color=[1, 0, 1])
-
-        pass
