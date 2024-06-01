@@ -151,6 +151,8 @@ class SlicerTools:
         lineNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsLineNode", lineNodeName)
         lineNode.AddControlPointWorld(lineStartPos, f'start_{lineNodeName}')
         lineNode.AddControlPointWorld(lineEndPos, f'end_{lineNodeName}')
+        lineNode.GetDisplayNode().SetTextScale(0.0)
+
 
         return lineNode
     
