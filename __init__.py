@@ -47,7 +47,7 @@ from_module_import("vtk_convenience")
 
 
 # import Library Files
-
+from .ProgressBarManager import *
 from .SegmentationImage import *
 from .SlicerTools import *
 from .FacetJointAlignment import *
