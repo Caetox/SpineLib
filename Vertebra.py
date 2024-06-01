@@ -18,10 +18,15 @@ class Vertebra:
                  landmarks:         SpineLib.Landmarks      = None
                  ) -> None:
         
+        lib_vertebraIDs = ["L5", "L4", "L3", "L2", "L1",
+                           "T12", "T11", "T10", "T9", "T8", "T7", "T6", "T5", "T4", "T3", "T2", "T1",
+                           "C7", "C6", "C5", "C4", "C3", "C2", "C1"]
+        
         self.index           = index
         self.landmarks       = landmarks
         self.spineGeometries = spineGeometries
         self.ligament_landmarks = {}
+        self.name = lib_vertebraIDs[index]
 
         # calculate landmarks, if not provided
         if (self.landmarks == None):
@@ -165,15 +170,14 @@ class Vertebra:
     '''
     Shape decomposition
     '''
-    def get_shape_decomposition(self) -> SpineLib.ShapeDecomposition:
+    def get_shape_decomposition(self, progressBarManager) -> SpineLib.ShapeDecomposition:
 
-        self.shapeDecomposition = SpineLib.ShapeDecomposition(geometry=self.geometry, center=self.center, size=self.size, orientation=self.orientation, index=self.index)
+        self.shapeDecomposition = SpineLib.ShapeDecomposition(geometry=self.geometry,
+                                                              center=self.center,
+                                                              size=self.size,
+                                                              orientation=self.orientation,
+                                                              symmetry_plane=self.symmetry_plane,
+                                                              index=self.index,
+                                                              progressBarManager=progressBarManager)
         return self.shapeDecomposition
-
-    # '''
-    # Compute ligament landmarks
-    # '''
-    # def get_ligament_landmarks() -> vtk.vtkPoints:
-    #     pass
-        
 
