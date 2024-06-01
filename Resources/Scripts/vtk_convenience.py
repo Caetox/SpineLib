@@ -58,6 +58,8 @@ from vtk import (
     vtkIdFilter,
     vtkTransformPolyDataFilter,
     vtkTransform,
+    vtkSmoothPolyDataFilter,
+    vtkWindowedSincPolyDataFilter,
     mutable,
 )
 from numpy import zeros, array, dot, ndarray
@@ -401,7 +403,9 @@ def filter_point_ids(
             remove_ids.InsertNextTuple1(id_)
     filtered_polydata = delete_points(polydata, remove_ids)
     filtered_polydata.Modified()
-    return filtered_polydata
+    cleaned_polydata = polydata_clean(filtered_polydata)
+
+    return cleaned_polydata
 
 def filter_points(
     polydata: vtkPolyData, condition: Callable[[int], bool]
@@ -412,7 +416,9 @@ def filter_points(
             remove_ids.InsertNextTuple1(id_)
     filtered_polydata = delete_points(polydata, remove_ids)
     filtered_polydata.Modified()
-    return filtered_polydata
+    cleaned_polydata = polydata_clean(filtered_polydata)
+
+    return cleaned_polydata
 
 
 def _calc_normals(polydata: vtkPolyData) -> vtkDataArray:
@@ -729,6 +735,26 @@ def polydata_remesh(polydata, subdivide=2, clusters=5000):
     clus.cluster(clusters)
     outputMesh = vtkPolyData()
     outputMesh.DeepCopy(clus.create_mesh())
+
+    return outputMesh
+
+'''
+Smooth polydata
+'''
+def polydata_smooth(polydata, method='Taubin', iterations=30, laplaceRelaxationFactor=0.5, taubinPassBand=0.1, boundarySmoothing=True):
+
+    if method == "Laplace":
+      smoothing = vtkSmoothPolyDataFilter()
+      smoothing.SetRelaxationFactor(laplaceRelaxationFactor)
+    else:  # "Taubin"
+      smoothing = vtkWindowedSincPolyDataFilter()
+      smoothing.SetPassBand(taubinPassBand)
+    smoothing.SetBoundarySmoothing(boundarySmoothing)
+    smoothing.SetNumberOfIterations(iterations)
+    smoothing.SetInputData(polydata)
+    smoothing.Update()
+
+    outputMesh = smoothing.GetOutput()
 
     return outputMesh
 
