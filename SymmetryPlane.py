@@ -25,7 +25,7 @@ def fit_symmetry_plane(geometry: vtk.vtkPolyData, numIterations: int):
 
     for i in range(numIterations):
 
-        print(f'Iteration {i+1}/{numIterations}')
+        #print(f'Iteration {i+1}/{numIterations}')
         
         mirroredGeometryPoints = vtk_to_numpy(mirroredGeometry.GetPoints().GetData())
         transformationMatrix = registerWithICP(mirroredGeometryPoints, points, pointToPlane=True)
@@ -179,7 +179,7 @@ def evaluateRegistrationICP(originalPoints, mirroredPoints):
     threshold = 10000
     evaluation = o3d.pipelines.registration.evaluate_registration(source, target, threshold)
 
-    print(f'evaluation.fitness={evaluation.fitness}, evaluation.inlier_rmse={evaluation.inlier_rmse}')
+    #print(f'evaluation.fitness={evaluation.fitness}, evaluation.inlier_rmse={evaluation.inlier_rmse}')
     return evaluation.fitness, evaluation.inlier_rmse
 
 
