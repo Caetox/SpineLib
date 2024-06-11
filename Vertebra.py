@@ -6,6 +6,9 @@ from vtk.util import numpy_support
 from typing import Dict, Tuple
 import SpineLib
 import slicer
+import json
+import csv
+import os
 
 class Vertebra:
 
@@ -28,18 +31,22 @@ class Vertebra:
         self.ligament_landmarks = {}
         self.name = lib_vertebraIDs[index]
 
-        # calculate landmarks, if not provided
-        if (self.landmarks == None):
-            self.geometry       	      = geometry
-            self.center                   = np.array(conv.calc_center_of_mass(self.geometry))
-            self.symmetry_plane           = SpineLib.SymmetryPlane.fit_symmetry_plane(geometry=geometry, numIterations=1)    
-            self.orientation              = Vertebra._init_orientation(self.spineGeometries, self.geometry, self.center, spineOrientation, self.symmetry_plane)
-            self.body                     = SpineLib.VertebralBody(body=self.geometry, center=self.center, orientation=self.orientation, max_angle=max_angle)
-            self.landmarks                = Vertebra._init_landmarks(body=self.body)
+        # # calculate landmarks, if not provided
+        # if (self.landmarks == None):
+        self.geometry       	      = geometry
+        self.center                   = np.array(conv.calc_center_of_mass(self.geometry))
+        self.symmetry_plane           = SpineLib.SymmetryPlane.fit_symmetry_plane(geometry=geometry, numIterations=1)    
+        self.orientation              = Vertebra._init_orientation(self.spineGeometries, self.geometry, self.center, spineOrientation, self.symmetry_plane, self.index)
+        self.body                     = SpineLib.VertebralBody(body=self.geometry, center=self.center, orientation=self.orientation, max_angle=max_angle)
+        self.landmarks                = Vertebra._init_landmarks(body=self.body)
+
+        #SpineLib.SlicerTools.createMarkupsFiducialNode([self.center], name="Center init")
         
         self.center                   = np.mean(list(vars(self.landmarks).values()), axis=0)
         self.size, self.orientation   = Vertebra._init_properties(landmarks=self.landmarks)
         self.objectToWorldMatrix      = Vertebra._init_objectToWorldMatrix(self.center, self.size, self.orientation)
+
+        #SpineLib.SlicerTools.createMarkupsFiducialNode([self.center], name="Center final")
 
 
     '''
@@ -52,10 +59,28 @@ class Vertebra:
             geometry: vtk.vtkPolyData,
             center: np.array,
             spineOrientation: SpineLib.Orientation,
-            symmetry_plane: vtk.vtkPlane
+            symmetry_plane: vtk.vtkPlane,
+            index: int
             ) -> SpineLib.Orientation:
 
-        up_approximator         = SpineLib.UpApproximator(spineGeometries)
+        # get superior orientation from spine curve
+        # if spine consists of only one vertebra, use average values from file
+        # (that is less accurate though, and only works if the model is loaded correctly in the coordinate system)
+        if len(spineGeometries) > 1:
+            up_approximator = SpineLib.UpApproximator(spineGeometries)
+            s = up_approximator(center)
+        else:
+            template_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Resources/spine_orientation_s.csv")
+            orientations_s = []
+            with open(template_file, 'r') as csvfile:
+                reader = csv.reader(csvfile)
+                for row in reader:
+                    values = list(map(float, row))
+                    orientations_s.append(np.array(values))
+            csvfile.close()
+            s = orientations_s[index]
+
+
         #oriented_bounding_box   = conv.calc_obb(geometry)[1:]
         symmetry_normal         = np.array(symmetry_plane.GetNormal())
 
@@ -64,7 +89,6 @@ class Vertebra:
 
         r       = conv.closest_vector([symmetry_normal], spineOrientation.r)
         r       = conv.normalize(r[0]*r[1])
-        s       = up_approximator(center)
         s       = conv.normalize(round(np.dot(s, spineOrientation.s)) * np.array(s))
         a       = conv.normalize(np.cross(s, r))
 
@@ -170,7 +194,7 @@ class Vertebra:
     '''
     Shape decomposition
     '''
-    def get_shape_decomposition(self, progressBarManager) -> SpineLib.ShapeDecomposition:
+    def get_shape_decomposition(self, progressBarManager, original_model) -> SpineLib.ShapeDecomposition:
 
         self.shapeDecomposition = SpineLib.ShapeDecomposition(geometry=self.geometry,
                                                               center=self.center,
@@ -178,6 +202,7 @@ class Vertebra:
                                                               orientation=self.orientation,
                                                               symmetry_plane=self.symmetry_plane,
                                                               index=self.index,
+                                                              original_model=original_model,
                                                               progressBarManager=progressBarManager)
         return self.shapeDecomposition
 
