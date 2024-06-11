@@ -115,34 +115,65 @@ class LigamentLandmarks:
 
             print("Detecting ALL and PLL landmarks for " + vertebra.name + " ...")
 
-            factor_cervical = 0.2
-            factor_thor_lumbar = 0.1
+            # TODO: change factors for width, this is only average lumbar width
+            avg_ALL_width = 37.1
+            avg_body_width = 52.0
+            avg_PLL_width = 20.0
+            avg_canal_width = 25.0
 
-            if (vertebra.index >= 17):
-                factor = factor_cervical
-            else:
-                factor = factor_thor_lumbar
+            # ratio of ligament to body width
+            ratio_ALL = avg_ALL_width / avg_body_width
+            factor_ALL = ratio_ALL/2
+
+            ratio_PLL = avg_PLL_width / avg_canal_width
+            factor_PLL = (1-ratio_PLL)/2
+
+            left_origin_ALL = vertebra.center - factor_ALL * vertebra.orientation.r * vertebra.size.width
+            right_origin_ALL = vertebra.center + factor_ALL * vertebra.orientation.r * vertebra.size.width
 
             left_medial = vertebra.shapeDecomposition.landmarks["left_pedicle_medial"]
             right_medial = vertebra.shapeDecomposition.landmarks["right_pedicle_medial"]
             canal_width = np.linalg.norm(left_medial - right_medial)
             canal_vector = right_medial - left_medial
-            left_origin = left_medial + factor * canal_vector
-            right_origin = right_medial - factor * canal_vector
+
+            left_origin_PLL = left_medial + factor_PLL * canal_vector
+            right_origin_PLL = right_medial - factor_PLL * canal_vector
+
+
+            # factor_cervical = 0.2
+            # factor_thor_lumbar = 0.1
+
+            # if (vertebra.index >= 17):
+            #     factor = factor_cervical
+            # else:
+            #     factor = factor_thor_lumbar
+
+                
+            # left_medial = vertebra.shapeDecomposition.landmarks["left_pedicle_medial"]
+            # right_medial = vertebra.shapeDecomposition.landmarks["right_pedicle_medial"]
+            # canal_width = np.linalg.norm(left_medial - right_medial)
+            # canal_vector = right_medial - left_medial
+            # left_origin = left_medial + factor * canal_vector
+            # right_origin = right_medial - factor * canal_vector
 
             for side in ["superior", "inferior"]:
                 endplate = getattr(vertebra.body, side+"_endplate")
                 boundary = conv.extractBoundary(endplate)
-                clipped = conv.clip_plane(boundary, left_origin, vertebra.orientation.r)
-                clipped = conv.clip_plane(clipped, right_origin, -vertebra.orientation.r)
-                anterior_clipped = conv.clip_plane(clipped, vertebra.center, vertebra.orientation.a)
-                posterior_clipped = conv.clip_plane(clipped, vertebra.center, -vertebra.orientation.a)
 
-                sorted_anterior = conv.sorted_points(list(numpy_support.vtk_to_numpy(anterior_clipped.GetPoints().GetData())), vertebra.orientation.r)
-                sorted_posterior = conv.sorted_points(list(numpy_support.vtk_to_numpy(posterior_clipped.GetPoints().GetData())), vertebra.orientation.r)
+                anterior_clipped = conv.clip_plane(boundary, vertebra.center, vertebra.orientation.a)
+                posterior_clipped = conv.clip_plane(boundary, vertebra.center, -vertebra.orientation.a)
 
-                all_curve = SpineLib.SlicerTools.createResampledCurve(sorted_anterior, 7, name="ALL", color=[1, 0, 0])
-                pll_curve = SpineLib.SlicerTools.createResampledCurve(sorted_posterior, 7, name="PLL", color=[1, 0, 0])
+                clipped_all = conv.clip_plane(anterior_clipped, left_origin_ALL, vertebra.orientation.r)
+                clipped_all = conv.clip_plane(clipped_all, right_origin_ALL, -vertebra.orientation.r)
+
+                clipped_pll = conv.clip_plane(posterior_clipped, left_origin_PLL, vertebra.orientation.r)
+                clipped_pll = conv.clip_plane(clipped_pll, right_origin_PLL, -vertebra.orientation.r)
+
+                sorted_anterior_all = conv.sorted_points(list(numpy_support.vtk_to_numpy(clipped_all.GetPoints().GetData())), vertebra.orientation.r)
+                sorted_posterior_pll = conv.sorted_points(list(numpy_support.vtk_to_numpy(clipped_pll.GetPoints().GetData())), vertebra.orientation.r)
+
+                all_curve = SpineLib.SlicerTools.createResampledCurve(sorted_anterior_all, 7, name="ALL", color=[1, 0, 0])
+                pll_curve = SpineLib.SlicerTools.createResampledCurve(sorted_posterior_pll, 7, name="PLL", color=[1, 0, 0])
 
                 all = slicer.util.arrayFromMarkupsControlPoints(all_curve)
                 pll = slicer.util.arrayFromMarkupsControlPoints(pll_curve)
@@ -184,6 +215,10 @@ class LigamentLandmarks:
 
             inf_AS_polydatas  = [inferior_vertebra.shapeDecomposition.process_polydata["ASL"], inferior_vertebra.shapeDecomposition.process_polydata["ASR"]]
             sup_AI_polydatas  = [superior_vertebra.shapeDecomposition.process_polydata["AIL"], superior_vertebra.shapeDecomposition.process_polydata["AIR"]]
+            # SpineLib.SlicerTools.createModelNode(inf_AS_polydatas[0], "Facet", color=[1.0, 0.0, 0.0], opacity=0.7)
+            # SpineLib.SlicerTools.createModelNode(inf_AS_polydatas[1], "Facet", color=[1.0, 0.0, 0.0], opacity=0.7)
+            # SpineLib.SlicerTools.createModelNode(sup_AI_polydatas[0], "Facet", color=[1.0, 0.0, 0.0], opacity=0.7)
+            # SpineLib.SlicerTools.createModelNode(sup_AI_polydatas[1], "Facet", color=[1.0, 0.0, 0.0], opacity=0.7)
             medial_directions = [inferior_vertebra.orientation.r, -inferior_vertebra.orientation.r]
 
             for inf_AS_polydata, sup_AI_polydata, medial_direction, side in zip(inf_AS_polydatas, sup_AI_polydatas, medial_directions, ["left", "right"]):
@@ -191,6 +226,9 @@ class LigamentLandmarks:
                 # get facet contact polydata
                 inf_contact_polydata = conv.get_contact_polydata(sup_AI_polydata, inf_AS_polydata)
                 sup_contact_polydata = conv.get_contact_polydata(inf_AS_polydata, sup_AI_polydata)
+
+                # SpineLib.SlicerTools.createModelNode(inf_contact_polydata, "FacetContact", color=[1.0, 0.0, 0.0], opacity=0.7)
+                # SpineLib.SlicerTools.createModelNode(sup_contact_polydata, "FacetContact", color=[1.0, 0.0, 0.0], opacity=0.7)
 
                 #combined_surface = conv.polydata_append(inf_contact_polydata, sup_contact_polydata)
                 #facet_polydata = conv.polydata_convexHull(combined_surface)
@@ -342,9 +380,13 @@ class LigamentLandmarks:
             # this is used for filtering, since the direction is different for e.g cervical/thoracic/lumbar vertebrae
             local_s = np.cross(local_r, main_comp)
 
-            # filter polydata
-            superior_spinous_polydata = conv.eliminate_misaligned_faces(spinous_polydata, controlPoints.mean(axis=0), local_s, 45.0)
+            # # filter polydata
+            superior_spinous_polydata = conv.eliminate_misaligned_faces(spinous_polydata, controlPoints.mean(axis=0),  local_s, 45.0)
             inferior_spinous_polydata = conv.eliminate_misaligned_faces(spinous_polydata, controlPoints.mean(axis=0), -local_s, 45.0)
+
+            # # find individual intersection points
+            # superior_intersection_points = [value for c in controlPoints if (value := conv.get_intersection_points(superior_spinous_polydata, c, c* vertebra.orientation.s*100)) is not None]
+            # inferior_intersection_points = [value for c in controlPoints if (value := conv.get_intersection_points(inferior_spinous_polydata, c, c*-vertebra.orientation.s*100)) is not None]
 
 
             # # for cervical spine, fit with symmetry plane
@@ -386,10 +428,12 @@ class LigamentLandmarks:
 
                 #SpineLib.SlicerTools.markupsLineNode("LocalR", controlPoints.mean(axis=0), controlPoints.mean(axis=0) + 25*local_s)
 
+            ########################################
             superior_intersection = conv.cut_plane(superior_spinous_polydata, controlPoints.mean(axis=0), local_r)
             superior_intersection_points = numpy_support.vtk_to_numpy(superior_intersection.GetPoints().GetData())
             inferior_intersection = conv.cut_plane(inferior_spinous_polydata, controlPoints.mean(axis=0), -local_r)
             inferior_intersection_points = numpy_support.vtk_to_numpy(inferior_intersection.GetPoints().GetData())
+            ########################################
 
             #SpineLib.SlicerTools.createModelNode(intersection_points, "IntersectionPoints", color=[1.0, 0.0, 0.0], opacity=1.0)
 
