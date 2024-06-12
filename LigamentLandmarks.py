@@ -116,9 +116,10 @@ class LigamentLandmarks:
             print("Detecting ALL and PLL landmarks for " + vertebra.name + " ...")
 
             # TODO: change factors for width, this is only average lumbar width
-            avg_ALL_width = 37.1
+            #avg_ALL_width = 37.1
+            avg_ALL_width = 25.0
             avg_body_width = 52.0
-            avg_PLL_width = 20.0
+            avg_PLL_width = 24.0
             avg_canal_width = 25.0
 
             # ratio of ligament to body width
@@ -443,10 +444,11 @@ class LigamentLandmarks:
             # fit curve to intersection points
             sorted_superior_points = conv.sorted_points(list(superior_intersection_points), main_comp)
             sorted_inferior_points = conv.sorted_points(list(inferior_intersection_points), main_comp)
-            superior_curveNode = SpineLib.SlicerTools.createResampledCurve(sorted_superior_points, 8, name="Superior_SpinousCurve", color=[1, 0, 0])
-            inferior_curveNode = SpineLib.SlicerTools.createResampledCurve(sorted_inferior_points, 8, name="Inferior_SpinousCurve", color=[1, 0, 0])
-            superior_ISL_samples = slicer.util.arrayFromMarkupsControlPoints(superior_curveNode)#[:-4]
-            inferior_ISL_samples = slicer.util.arrayFromMarkupsControlPoints(inferior_curveNode)#[:-4]
+            superior_curveNode = SpineLib.SlicerTools.createResampledCurve(sorted_superior_points, 7, name="Superior_SpinousCurve", color=[1, 0, 0])
+            inferior_curveNode = SpineLib.SlicerTools.createResampledCurve(sorted_inferior_points, 7, name="Inferior_SpinousCurve", color=[1, 0, 0])
+            superior_ISL_samples = slicer.util.arrayFromMarkupsControlPoints(superior_curveNode)[1:-1]
+            inferior_ISL_samples = slicer.util.arrayFromMarkupsControlPoints(inferior_curveNode)[1:-1]
+            
 
             SpineLib.SlicerTools.removeNodes([superior_curveNode, inferior_curveNode])
 
