@@ -156,9 +156,12 @@ def closest_vector(
     return vector_similarity_dict[greatest_similarity], round(greatest_similarity)
 
 
-def normalize(vector: ndarray) -> ndarray:
+def normalize(vector: np.ndarray) -> np.ndarray:
     """Return vector in the direction of the input parameter of length 1."""
     length = norm(vector)
+    if length == 0:
+        print("Warning: Attempting to normalize a zero vector:", vector)
+        return vector
     return vector / length
 
 
