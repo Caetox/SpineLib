@@ -116,7 +116,7 @@ class LigamentLandmarks:
             right_ITL_landmark = conv.get_intersection_points(right_transverse_polydata, controlPoints[0], controlPoints[0]+main_comp*100)            
 
             ITL_landmarks = [left_ITL_landmark, right_ITL_landmark]
-            markupNode = SpineLib.SlicerTools.createMarkupsFiducialNode(ITL_landmarks, "ITL", color=[0.5, 0, 0.25])
+            markupNode = SpineLib.SlicerTools.createMarkupsFiducialNode(ITL_landmarks, "ITL", color=[1, 0, 0])
 
             vertebra.ligament_landmarks["ITL"] = ITL_landmarks
 
@@ -150,7 +150,7 @@ class LigamentLandmarks:
             vertebra.ligament_landmarks["SSL"] = [SSL_landmark]
 
             
-            markupNode = SpineLib.SlicerTools.createMarkupsFiducialNode([SSL_landmark], "SSL", color=[0.5, 0, 0.25])
+            markupNode = SpineLib.SlicerTools.createMarkupsFiducialNode([SSL_landmark], "SSL", color=[1, 0, 0])
 
             slicer.app.processEvents()
 
@@ -237,7 +237,7 @@ class LigamentLandmarks:
                 vertebra.ligament_landmarks[side+"PLL"] = pll
 
             for name in ["superiorALL", "superiorPLL", "inferiorALL", "inferiorPLL"]:
-                SpineLib.SlicerTools.createMarkupsFiducialNode(vertebra.ligament_landmarks[name], name, color=[0.5, 0, 0.75])
+                SpineLib.SlicerTools.createMarkupsFiducialNode(vertebra.ligament_landmarks[name], name, color=[1, 0, 0])
             
             progressBarManager.updateProgress()
         
@@ -367,7 +367,7 @@ class LigamentLandmarks:
                 is_2 = is_sorted[-1]
 
                 inf_ligament_landmarks = [lr_1, lr_2, is_1, is_2]
-                inf_ligament_markup = SpineLib.SlicerTools.createMarkupsFiducialNode(inf_ligament_landmarks, "InferiorVertebraLigamentLandmarks", color=[0, 0, 1])
+                inf_ligament_markup = SpineLib.SlicerTools.createMarkupsFiducialNode(inf_ligament_landmarks, "InferiorVertebraLigamentLandmarks", color=[1, 0, 0])
 
                 # filter polydata to get superior facet surface
                 # sup_contact_polydata = conv.eliminate_misaligned_faces(sup_AI_polydata, planeCenter, -normal, 30.0)
@@ -385,7 +385,7 @@ class LigamentLandmarks:
                 is_2 = is_sorted[-1]
 
                 sup_ligament_landmarks = [lr_1, lr_2, is_1, is_2]
-                sup_ligament_markup = SpineLib.SlicerTools.createMarkupsFiducialNode(sup_ligament_landmarks, "SuperiorVertebraLigamentLandmarks", color=[0, 1, 1])
+                sup_ligament_markup = SpineLib.SlicerTools.createMarkupsFiducialNode(sup_ligament_landmarks, "SuperiorVertebraLigamentLandmarks", color=[1, 0, 0])
 
                 inferior_vertebra.ligament_landmarks["CL_" + side + "_sup"] = inf_ligament_landmarks
                 superior_vertebra.ligament_landmarks["CL_" + side + "_inf"] = sup_ligament_landmarks
@@ -513,8 +513,8 @@ class LigamentLandmarks:
             # create markup nodes
             ISL_landmarks = np.concatenate((superior_ISL, inferior_ISL))
             SpineLib.SlicerTools.removeNodes([superior_curveNode, inferior_curveNode])
-            SpineLib.SlicerTools.createMarkupsFiducialNode(superior_ISL, "Superior_ISL", color=[0.0, 0.0, 1.0])
-            SpineLib.SlicerTools.createMarkupsFiducialNode(inferior_ISL, "Inferior_ISL", color=[0.0, 0.0, 1.0])
+            SpineLib.SlicerTools.createMarkupsFiducialNode(superior_ISL, "Superior_ISL", color=[1.0, 0.0, 0.0])
+            SpineLib.SlicerTools.createMarkupsFiducialNode(inferior_ISL, "Inferior_ISL", color=[1.0, 0.0, 0.0])
 
             # add landmarks to dict
             vertebra.ligament_landmarks["ISL"] = ISL_landmarks
@@ -586,8 +586,8 @@ class LigamentLandmarks:
         right_clipped = conv.clip_plane(parametricFunctionSource.GetOutput(), vertebra.center, vertebra.orientation.r)
         left_flavum_Points = numpy_support.vtk_to_numpy(left_clipped.GetPoints().GetData())
         right_flavum_Points = numpy_support.vtk_to_numpy(right_clipped.GetPoints().GetData())
-        left_flavum_curve = SpineLib.SlicerTools.createResampledCurve(left_flavum_Points, 7, name="FlavumCurve", color=[1, 0, 1])
-        right_flavum_curve = SpineLib.SlicerTools.createResampledCurve(right_flavum_Points, 7, name="FlavumCurve", color=[1, 0, 1])
+        left_flavum_curve = SpineLib.SlicerTools.createResampledCurve(left_flavum_Points, 7, name="FlavumCurve", color=[1, 0, 0])
+        right_flavum_curve = SpineLib.SlicerTools.createResampledCurve(right_flavum_Points, 7, name="FlavumCurve", color=[1, 0, 0])
         left_flavum_Points = slicer.util.arrayFromMarkupsControlPoints(left_flavum_curve)[1:-1]
         right_flavum_Points = slicer.util.arrayFromMarkupsControlPoints(right_flavum_curve)[1:-1]
         flavum_points = np.concatenate((left_flavum_Points, right_flavum_Points))
@@ -629,7 +629,7 @@ class LigamentLandmarks:
                 left_keypoint = vertebra.ligament_landmarks["CL_left_sup"][1]
                 right_keypoint = vertebra.ligament_landmarks["CL_right_sup"][1]
                 upper_flavum_points = self.flavum_curve(vertebra, left_keypoint, right_keypoint)
-                SpineLib.SlicerTools.createMarkupsFiducialNode(upper_flavum_points, "Ligamentum Flavum", color=[0.5, 0, 0.25])
+                SpineLib.SlicerTools.createMarkupsFiducialNode(upper_flavum_points, "Ligamentum Flavum", color=[1, 0, 0])
                 vertebra.ligament_landmarks["LF_sup"] = upper_flavum_points   
             
 
@@ -638,7 +638,7 @@ class LigamentLandmarks:
                 left_keypoint = vertebra.ligament_landmarks["CL_left_inf"][1]
                 right_keypoint = vertebra.ligament_landmarks["CL_right_inf"][1]
                 lower_flavum_points = self.flavum_curve(vertebra, left_keypoint, right_keypoint)
-                SpineLib.SlicerTools.createMarkupsFiducialNode(lower_flavum_points, "Ligamentum Flavum", color=[0.5, 0, 0.25])
+                SpineLib.SlicerTools.createMarkupsFiducialNode(lower_flavum_points, "Ligamentum Flavum", color=[1, 0, 0])
                 vertebra.ligament_landmarks["LF_inf"] = lower_flavum_points
 
 

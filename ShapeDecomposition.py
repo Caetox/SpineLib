@@ -318,9 +318,9 @@ class ShapeDecomposition:
         segmented_polydata, process_polydata = ShapeDecomposition.centerline_segmentation(processes, body, centerlines, index)
         #segmented_polydata, process_polydata = ShapeDecomposition.collapsed_centerline_segmentation(initial_segmented_polydata, centerlines)
         #segmented_polydata, process_polydata = ShapeDecomposition.approx_centerline_segmentation(initial_segmented_polydata, approx_centerlines)
-        # get all centerline curve nodes
-        #centerline_nodes = [centerlines[name] for name in process_landmarks.keys()]
-        #SpineLib.SlicerTools.removeNodes(centerline_nodes)
+        # # get all centerline curve nodes
+        # centerline_nodes = [centerlines[name] for name in process_landmarks.keys()]
+        # SpineLib.SlicerTools.removeNodes(centerline_nodes)
         
         return segmented_polydata, process_polydata, process_landmarks, centerlines
         #return None, None, None, None
@@ -706,7 +706,7 @@ class ShapeDecomposition:
             centerlinePolyData, voronoiDiagramPolyData = extractLogic.extractCenterline(preprocessedPolyData, pointMarkup)
             centerlinePropertiesTableNode = None
             extractLogic.createCurveTreeFromCenterline(centerlinePolyData, centerlineCurveNode, centerlinePropertiesTableNode)
-            centerlineCurveNode.GetDisplayNode().SetVisibility(0)
+            #centerlineCurveNode.GetDisplayNode().SetVisibility(0)
             # # resample curve
             # #centerlineCurveNode.SetCurveTypeToPolynomial()
             # resamplingNumber = 25
