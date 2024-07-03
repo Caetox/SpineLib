@@ -149,13 +149,16 @@ class ShapeDecomposition:
             
         # Highlight inflection, minima, and maxima points on the plot with different colors
         plt.ioff()
-        plt.scatter(x_vals[downward_inflection_points], y_vals[downward_inflection_points], color='red', marker='o', label='Downward Inflection Points')
-        plt.scatter(x_vals[upward_inflection_points], y_vals[upward_inflection_points], color='blue', marker='x', label='Upward Inflection Points')
-        plt.scatter(x_vals[minima_points], y_vals[minima_points], color='orange', marker='o', label='Minima Points')
-        plt.scatter(x_vals[maxima_points], y_vals[maxima_points], color='purple', marker='x', label='Maxima Points')
-        if lowest_min_between_maxima is not None:
-            plt.scatter(x_vals[lowest_min_between_maxima], y_vals[lowest_min_between_maxima], marker='s', color='magenta', s=80, label='Pre-Max Minimum')
-        plt.legend()
+        plt.plot(x_vals, y_vals, color='skyblue')
+        plt.xlabel("Distance")
+        plt.ylabel("Probability Density")
+        # plt.scatter(x_vals[downward_inflection_points], y_vals[downward_inflection_points], color='red', marker='o', label='Downward Inflection Points')
+        # plt.scatter(x_vals[upward_inflection_points], y_vals[upward_inflection_points], color='blue', marker='x', label='Upward Inflection Points')
+        # plt.scatter(x_vals[minima_points], y_vals[minima_points], color='orange', marker='o', label='Minima Points')
+        # plt.scatter(x_vals[maxima_points], y_vals[maxima_points], color='purple', marker='x', label='Maxima Points')
+        # if lowest_min_between_maxima is not None:
+        #     plt.scatter(x_vals[lowest_min_between_maxima], y_vals[lowest_min_between_maxima], marker='s', color='magenta', s=80, label='Pre-Max Minimum')
+        # plt.legend()
 
         #plt.show(block=False)
         #plt.show()
