@@ -46,8 +46,14 @@ class VertebralBody:
         return endplate
     
     
+    # extract the intersection curve of the endplate, with the outermost points
     def _extract_curve(
-            endplate: vtk.vtkPolyData, plane_origin: np.array, plane_normal: np.array, curve_direction: np.array) -> SpineLib.Curve:
+            endplate: vtk.vtkPolyData,
+            plane_origin: np.array,
+            plane_normal: np.array,
+            curve_direction: np.array
+            ) -> SpineLib.Curve:
+        
         geometry = conv.cut_plane(endplate, plane_origin, plane_normal)
         regression = conv.calc_main_component(geometry)
         regression = (regression if regression.dot(curve_direction) >= 0 else -regression)

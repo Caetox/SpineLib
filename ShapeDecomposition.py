@@ -34,7 +34,7 @@ class ShapeDecomposition:
                  symmetry_plane:     vtk.vtkPlane                = None,
                  index:              int                         = None,
                  original_model:     vtk.vtkPolyData             = None,
-                 progressBarManager:  SpineLib.ProgressBarManager = None
+                 progressBarManager: SpineLib.ProgressBarManager = None
                  ) -> None:
         
         lib_vertebraIDs = ["L5", "L4", "L3", "L2", "L1",
@@ -274,8 +274,8 @@ class ShapeDecomposition:
         for name, point in process_landmarks.items():
             centerlines[name] = ShapeDecomposition.centerline(processes, point, process_endpoints[name], index, name)
         
-        # SpineLib.SlicerTools.createMarkupsFiducialNode([point for point in process_endpoints.values()], "Process Endpoints"+str(index))
-        # SpineLib.SlicerTools.createMarkupsFiducialNode([point for point in process_landmarks.values()], "Process Landmarks"+str(index))
+        #SpineLib.SlicerTools.createMarkupsFiducialNode([point for point in process_endpoints.values()], "Process Endpoints"+str(index))
+        #SpineLib.SlicerTools.createMarkupsFiducialNode([point for point in process_landmarks.values()], "Process Landmarks"+str(index))
 
         # approx_centerlines = {"TL": [], "ASL": [], "AIL": [], "S": [], "AIR": [], "ASR": [], "TR": []}
         # for name, point in process_landmarks.items():
@@ -431,7 +431,7 @@ class ShapeDecomposition:
         if (index < 17 and index != 5 and index != 6):
 
             labels, cluster_centers = ShapeDecomposition.k_means(polydata_points, 8)
-            #SpineLib.SlicerTools.createMarkupsFiducialNode(cluster_centers, "Cluster Centers"+str(index))
+            SpineLib.SlicerTools.createMarkupsFiducialNode(cluster_centers, "Cluster Centers"+str(index))
 
             ######################################### Find process clusters ################################################################
 
@@ -706,7 +706,7 @@ class ShapeDecomposition:
             centerlinePolyData, voronoiDiagramPolyData = extractLogic.extractCenterline(preprocessedPolyData, pointMarkup)
             centerlinePropertiesTableNode = None
             extractLogic.createCurveTreeFromCenterline(centerlinePolyData, centerlineCurveNode, centerlinePropertiesTableNode)
-            #centerlineCurveNode.GetDisplayNode().SetVisibility(0)
+            centerlineCurveNode.GetDisplayNode().SetVisibility(0)
             # # resample curve
             # #centerlineCurveNode.SetCurveTypeToPolynomial()
             # resamplingNumber = 25

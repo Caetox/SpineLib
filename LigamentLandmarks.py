@@ -283,9 +283,9 @@ class LigamentLandmarks:
                 # SpineLib.SlicerTools.createModelNode(inf_contact_polydata, "FacetContact", color=[1.0, 0.0, 0.0], opacity=0.7)
                 # SpineLib.SlicerTools.createModelNode(sup_contact_polydata, "FacetContact", color=[1.0, 0.0, 0.0], opacity=0.7)
 
-                #combined_surface = conv.polydata_append(inf_contact_polydata, sup_contact_polydata)
-                #facet_polydata = conv.polydata_convexHull(combined_surface)
-                #SpineLib.SlicerTools.createModelNode(facet_polydata, "Facet", color=[1.0, 0.0, 0.0], opacity=0.7)
+                combined_surface = conv.polydata_append(inf_contact_polydata, sup_contact_polydata)
+                facet_polydata = conv.polydata_convexHull(combined_surface)
+                SpineLib.SlicerTools.createModelNode(facet_polydata, "Facet", color=[1.0, 0.0, 0.0], opacity=0.7)
 
 
 
