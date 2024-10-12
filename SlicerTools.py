@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from slicer.util import loadModel
 from vtk.util.numpy_support import vtk_to_numpy
 from vtk.util.numpy_support import numpy_to_vtk
+import logging
 
 import vtk_convenience as conv
 import SpineLib
@@ -337,3 +338,15 @@ class SlicerTools:
         
         return markupsNode
     
+    '''
+    Set model color node for scalars
+    '''
+    def setModelColorTable(modelNode, colorTableName):
+        """Set the color table of the model node to the specified color table."""
+        displayNode = modelNode.GetDisplayNode()
+        if displayNode:
+            colorNode = slicer.util.getNode(colorTableName)
+            if colorNode:
+                displayNode.SetAndObserveColorNodeID(colorNode.GetID())
+            else:
+                logging.error(f"Color table {colorTableName} not found.")

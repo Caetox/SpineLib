@@ -34,7 +34,8 @@ class ShapeDecomposition:
                  symmetry_plane:     vtk.vtkPlane                = None,
                  index:              int                         = None,
                  original_model:     vtk.vtkPolyData             = None,
-                 progressBarManager:  SpineLib.ProgressBarManager = None
+                 progressBarManager: SpineLib.ProgressBarManager = None,
+                 with_lamina:        bool                        = True,
                  ) -> None:
         
         lib_vertebraIDs = ["L5", "L4", "L3", "L2", "L1",
@@ -45,51 +46,19 @@ class ShapeDecomposition:
         self.geometry = geometry
         self.threshold, self.body, self.processes        = ShapeDecomposition._pdf_decomposition(geometry, center, size, orientation, index)
         self.landmarks                                   = ShapeDecomposition._landmarks(geometry, center, size, orientation, self.threshold, index)
-        self.segmented_geometry, self.process_polydata, self.process_landmarks, self.centerlines = ShapeDecomposition._segment_processes(geometry, self.processes, self.body, self.landmarks, orientation, symmetry_plane, index)
-        #self.label_Model = ShapeDecomposition._segment_original_model(original_model, self.threshold, self.landmarks["body_front"], self.centerlines, index)
-        # orig_threshold, orig_body, orig_processes        = ShapeDecomposition._pdf_decomposition(original_model, center, size, orientation, index)
-        # print(self.threshold)
-        # print(orig_threshold)
-        # SpineLib.SlicerTools.createModelNode(orig_body, "orig_body")
+        self.segmented_geometry, self.process_polydata, self.process_landmarks, self.centerlines = ShapeDecomposition._segment_processes(geometry, self.processes, self.body, self.landmarks, orientation, symmetry_plane, index, with_lamina)
+        
+        if original_model is not None:
+            body = conv.clip_sphere(original_model, self.landmarks["body_front"], self.threshold, InsideOut=True)
+            label_model,_ = ShapeDecomposition.centerline_segmentation(original_model, body, self.centerlines, index)
+
+        segmented_model = SpineLib.SlicerTools.createModelNode(label_model, str(lib_vertebraIDs[index]) + "_segmented")
+        SpineLib.SlicerTools.setModelColorTable(segmented_model, colorTableName='VT_ShapeSeg')
 
         if progressBarManager is not None: progressBarManager.updateProgress()
 
-    def _segment_original_model(original_model, threshold, landmark, centerlines, index):
-
-        #SpineLib.SlicerTools.createMarkupsFiducialNode([landmark], "Front Landmark")
-        
-        # points = numpy_support.vtk_to_numpy(original_model.GetPoints().GetData())
-        # distances = np.linalg.norm(points - landmark, axis=1)
-        # body = conv.filter_point_ids(original_model, condition=lambda vertex: distances[vertex] > threshold)
-
-        #SpineLib.SlicerTools.createModelNode(body, "orig body")
-        
-
-        body = conv.clip_sphere(original_model, landmark, threshold, InsideOut=True)
-        #SpineLib.SlicerTools.createModelNode(body, "vertebral_body")
-
-        label_model,_ = ShapeDecomposition.centerline_segmentation(original_model, body, centerlines, index)
-
-        SpineLib.SlicerTools.createModelNode(label_model, "label_model")
 
         
-        # vtk_labels = vtk.vtkFloatArray()
-        # vtk_labels.SetNumberOfComponents(1)
-        # vtk_labels.SetName("Centerline_Segments")
-
-        # for point in polydata_points:
-        #     if point in body_points:
-        #         vtk_labels.InsertNextValue(10)
-        #     else:
-        #         centerline_distances = {name: ShapeDecomposition.centerline_distance(centerlines[name], point) for name in centerlines.keys()}
-        #         closest_centerline = min(centerline_distances, key=centerline_distances.get)
-        #         l = list(centerlines.keys()).index(closest_centerline)
-        #         vtk_labels.InsertNextValue(l)
-
-        # polydata.GetPointData().SetScalars(vtk_labels)
-
-            
-
     '''
     Calculate orientation of the vertebra.
     The vectors represent the RAS-coordinates of a local object coordinate system.
@@ -178,6 +147,9 @@ class ShapeDecomposition:
         # chart_node = slicer.util.plot(narray, xColumnIndex=0, title="PDF")
         # slicer.app.processEvents()
 
+        SpineLib.SlicerTools.createModelNode(vertebral_body, "Vertebral Body", opacity=0.8)
+        SpineLib.SlicerTools.createModelNode(processes, "Processes", color=[0.5, 0.5, 0.5], opacity=0.8)
+
         return threshold, vertebral_body, processes
     
 
@@ -237,10 +209,12 @@ class ShapeDecomposition:
             orientation:       SpineLib.Orientation    = None,
             symmetry_plane:    vtk.vtkPlane            = None,
             index:             int                     = None,
+            with_lamina:       bool                    = True,
             ):
 
         #SpineLib.SlicerTools.createMarkupsFiducialNode([landmarks["left_pedicle_com"],landmarks["right_pedicle_com"]], "Lamina Endpoints")
-        centerline_lamina = ShapeDecomposition.centerline(processes, landmarks["left_pedicle_com"], landmarks["right_pedicle_com"], index, "Lamina")
+        SpineLib.SlicerTools.createMarkupsFiducialNode([landmarks["left_pedicle_medial"], landmarks["right_pedicle_medial"]], "Pedicle")
+        centerline_lamina = ShapeDecomposition.centerline(processes, landmarks["left_pedicle_medial"], landmarks["right_pedicle_medial"], index, "Lamina")
         centerline_lamina_points = centerline_lamina.GetCurvePointsWorld()
         centerline_lamina_points = numpy_support.vtk_to_numpy(centerline_lamina_points.GetData())
         centerline_lamina_samples = [centerline_lamina_points[i] for i in range(0, len(centerline_lamina_points), len(centerline_lamina_points)//6)]
@@ -283,7 +257,8 @@ class ShapeDecomposition:
         #     SpineLib.SlicerTools.markupsLineNode(f"{name}_approx_centerline", point, process_endpoints[name])
         
         # # TODO: for segmenting Lamina
-        #centerlines["Lamina"] = centerline_lamina
+        if with_lamina:
+            centerlines["Lamina"] = centerline_lamina
 
 
         # # centerline pdf points
@@ -640,13 +615,13 @@ class ShapeDecomposition:
         vtk_labels.SetName("Centerline_Segments")
 
         for point in polydata_points:
-            # if point in body_points:
-            #     l = -1
-            # else:
-            centerline_distances = {name: ShapeDecomposition.centerline_distance(centerlines[name], point) for name in centerlines.keys()}
-            closest_centerline = min(centerline_distances, key=centerline_distances.get)
-            l = list(centerlines.keys()).index(closest_centerline)
-            vtk_labels.InsertNextValue(l)
+            if point in body_points:
+                l = -1
+            else:
+                centerline_distances = {name: ShapeDecomposition.centerline_distance(centerlines[name], point) for name in centerlines.keys()}
+                closest_centerline = min(centerline_distances, key=centerline_distances.get)
+                l = list(centerlines.keys()).index(closest_centerline)
+            vtk_labels.InsertNextValue(l+1)
 
         polydata.GetPointData().SetScalars(vtk_labels)
 
@@ -685,13 +660,13 @@ class ShapeDecomposition:
 
         return polydata, process_polydatas
 
-    def centerline(polydata, startPoint, endPoints, index, name):
+    def centerline(polydata, startPoint, endPoint, index, name):
         
         pointMarkup = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsFiducialNode', "Points")
         pointMarkup.GetDisplayNode().SetTextScale(0.0)
         pointMarkup.GetDisplayNode().SetSelectedColor(0, 0, 1)
         pointMarkup.AddControlPoint(startPoint)
-        pointMarkup.AddControlPoint(endPoints)
+        pointMarkup.AddControlPoint(endPoint)
 
         extractLogic = ExtractCenterline.ExtractCenterlineLogic()
         targetNumberOfPoints = 5000.0
