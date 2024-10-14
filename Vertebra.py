@@ -42,7 +42,7 @@ class Vertebra:
 
         #SpineLib.SlicerTools.createMarkupsFiducialNode([self.center], name="Center init")
         
-        self.center                   = np.mean(list(vars(self.landmarks).values()), axis=0)
+        self.center                   = Vertebra._init_center(self.landmarks)
         self.size, self.orientation   = Vertebra._init_properties(landmarks=self.landmarks)
         self.objectToWorldMatrix      = Vertebra._init_objectToWorldMatrix(self.center, self.size, self.orientation)
 
@@ -99,7 +99,7 @@ class Vertebra:
     Set landmarks of the vertebral body as the minimal and maximal curve points.
     For each endplate there are 4 landmarks, marking the anterior, posterior, right and left.
     '''
-    def _init_landmarks(body:SpineLib.VertebralBody) -> SpineLib.Landmarks:
+    def _init_landmarks(body: SpineLib.VertebralBody) -> SpineLib.Landmarks:
 
         superior_posterior = body.superior_sagittal_curve.min_point
         superior_anterior  = body.superior_sagittal_curve.max_point
@@ -114,6 +114,22 @@ class Vertebra:
                      superior_left, superior_right, inferior_left, inferior_right]
         
         return SpineLib.Landmarks(*landmarks)
+
+
+    '''
+    Calculate vertebral body center with landmarks
+    '''
+    def _init_center(landmarks: SpineLib.Landmarks) -> np.array:
+
+        superior_posterior = landmarks.superior_posterior
+        superior_anterior  = landmarks.superior_anterior
+        inferior_posterior = landmarks.inferior_posterior
+        inferior_anterior  = landmarks.inferior_anterior
+
+        center_landmarks = [superior_posterior, superior_anterior, inferior_posterior, inferior_anterior]
+        center = np.mean(center_landmarks, axis=0)
+        
+        return center
 
 
     '''
@@ -194,7 +210,11 @@ class Vertebra:
     '''
     Shape decomposition
     '''
-    def get_shape_decomposition(self, progressBarManager, original_model) -> SpineLib.ShapeDecomposition:
+    def get_shape_decomposition(self,
+                                progressBarManager = None,
+                                original_model = None,
+                                with_lamina = True,
+                                ) -> SpineLib.ShapeDecomposition:
 
         self.shapeDecomposition = SpineLib.ShapeDecomposition(geometry=self.geometry,
                                                               center=self.center,
@@ -203,6 +223,7 @@ class Vertebra:
                                                               symmetry_plane=self.symmetry_plane,
                                                               index=self.index,
                                                               original_model=original_model,
+                                                              with_lamina=with_lamina,
                                                               progressBarManager=progressBarManager)
         return self.shapeDecomposition
 

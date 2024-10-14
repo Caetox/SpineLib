@@ -16,28 +16,31 @@ class VertebralBody:
                  max_angle: float
                 ) -> None:
           
-          # extract endplates
-          self.superior_endplate = VertebralBody._extract_endplate(body=body, center=center, direction=orientation.s, max_angle=max_angle)
-          self.inferior_endplate = VertebralBody._extract_endplate(body=body, center=center, direction=-orientation.s, max_angle=max_angle)
-          
-          # get sagittal curves
-          self.superior_sagittal_curve = VertebralBody._extract_curve(self.superior_endplate, plane_origin=center, plane_normal=orientation.r, curve_direction=orientation.a)
-          self.inferior_sagittal_curve = VertebralBody._extract_curve(self.inferior_endplate, plane_origin=center, plane_normal=orientation.r, curve_direction=orientation.a)
+        # extract endplates
+        self.superior_endplate = VertebralBody._extract_endplate(body=body, center=center, orientation_clip=orientation.a, orientation_extract=orientation.s, max_angle=max_angle)
+        self.inferior_endplate = VertebralBody._extract_endplate(body=body, center=center, orientation_clip=orientation.a, orientation_extract=-orientation.s, max_angle=max_angle)
+        
+        # get sagittal curves
+        self.superior_sagittal_curve = VertebralBody._extract_curve(self.superior_endplate, plane_origin=center, plane_normal=orientation.r, curve_direction=orientation.a)
+        self.inferior_sagittal_curve = VertebralBody._extract_curve(self.inferior_endplate, plane_origin=center, plane_normal=orientation.r, curve_direction=orientation.a)
 
-          # get center of sagittal curves
-          sagittal_center = np.mean([self.superior_sagittal_curve.min_point, self.superior_sagittal_curve.max_point, self.inferior_sagittal_curve.min_point, self.inferior_sagittal_curve.max_point],axis=0)
-          
-          # get frontal curves (with sagittal curve center as plane_origin)
-          self.superior_frontal_curve = VertebralBody._extract_curve(self.superior_endplate, plane_origin=sagittal_center, plane_normal=orientation.a, curve_direction=orientation.r)
-          self.inferior_frontal_curve = VertebralBody._extract_curve(self.inferior_endplate, plane_origin=sagittal_center, plane_normal=orientation.a, curve_direction=orientation.r)
+        # get center of sagittal curves
+        sagittal_center = np.mean([self.superior_sagittal_curve.min_point, self.superior_sagittal_curve.max_point, self.inferior_sagittal_curve.min_point, self.inferior_sagittal_curve.max_point],axis=0)
+        
+        # get frontal curves (with sagittal curve center as plane_origin)
+        self.superior_frontal_curve = VertebralBody._extract_curve(self.superior_endplate, plane_origin=sagittal_center, plane_normal=orientation.a, curve_direction=orientation.r)
+        self.inferior_frontal_curve = VertebralBody._extract_curve(self.inferior_endplate, plane_origin=sagittal_center, plane_normal=orientation.a, curve_direction=orientation.r)
 
 
 
-    def _extract_endplate(body: vtk.vtkPolyData, center: np.array, direction: np.array, max_angle: float):
+    def _extract_endplate(body: vtk.vtkPolyData, center: np.array, orientation_clip: np.array, orientation_extract: np.array, max_angle: float):
+
+        # cut vertebra in half
+        anterior = conv.clip_plane(body, center, orientation_clip)
 
         # extract points, where normals are similar to the given direction
         endplate = conv.eliminate_misaligned_faces(
-            polydata=body, center=center, direction=direction, max_angle=max_angle
+            polydata=anterior, center=center, direction=orientation_extract, max_angle=max_angle
         )
         # filter with connectivity filter to remove outliers (only the largest connected region remains)
         endplate = conv.filterLargestRegion(endplate)

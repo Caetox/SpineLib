@@ -34,8 +34,8 @@ class ShapeDecomposition:
                  symmetry_plane:     vtk.vtkPlane                = None,
                  index:              int                         = None,
                  original_model:     vtk.vtkPolyData             = None,
-                 progressBarManager: SpineLib.ProgressBarManager = None,
-                 with_lamina:        bool                        = True,
+                 with_lamina:        bool                        = None,
+                 progressBarManager:  SpineLib.ProgressBarManager = None
                  ) -> None:
         
         lib_vertebraIDs = ["L5", "L4", "L3", "L2", "L1",
@@ -47,18 +47,16 @@ class ShapeDecomposition:
         self.threshold, self.body, self.processes        = ShapeDecomposition._pdf_decomposition(geometry, center, size, orientation, index)
         self.landmarks                                   = ShapeDecomposition._landmarks(geometry, center, size, orientation, self.threshold, index)
         self.segmented_geometry, self.process_polydata, self.process_landmarks, self.centerlines = ShapeDecomposition._segment_processes(geometry, self.processes, self.body, self.landmarks, orientation, symmetry_plane, index, with_lamina)
-        
-        if original_model is not None:
-            body = conv.clip_sphere(original_model, self.landmarks["body_front"], self.threshold, InsideOut=True)
-            label_model,_ = ShapeDecomposition.centerline_segmentation(original_model, body, self.centerlines, index)
 
-        segmented_model = SpineLib.SlicerTools.createModelNode(label_model, str(lib_vertebraIDs[index]) + "_segmented")
-        SpineLib.SlicerTools.setModelColorTable(segmented_model, colorTableName='VT_ShapeSeg')
+        if original_model is not None:
+            orig_body = conv.clip_sphere(original_model, self.landmarks["body_front"], self.threshold, InsideOut=True)
+            self.label_Model, _ = ShapeDecomposition.centerline_segmentation(original_model, orig_body, self.centerlines, index)
+            SpineLib.SlicerTools.createModelNode(self.label_Model, "label_model")
 
         if progressBarManager is not None: progressBarManager.updateProgress()
 
+            
 
-        
     '''
     Calculate orientation of the vertebra.
     The vectors represent the RAS-coordinates of a local object coordinate system.
@@ -118,13 +116,16 @@ class ShapeDecomposition:
             
         # Highlight inflection, minima, and maxima points on the plot with different colors
         plt.ioff()
-        plt.scatter(x_vals[downward_inflection_points], y_vals[downward_inflection_points], color='red', marker='o', label='Downward Inflection Points')
-        plt.scatter(x_vals[upward_inflection_points], y_vals[upward_inflection_points], color='blue', marker='x', label='Upward Inflection Points')
-        plt.scatter(x_vals[minima_points], y_vals[minima_points], color='orange', marker='o', label='Minima Points')
-        plt.scatter(x_vals[maxima_points], y_vals[maxima_points], color='purple', marker='x', label='Maxima Points')
-        if lowest_min_between_maxima is not None:
-            plt.scatter(x_vals[lowest_min_between_maxima], y_vals[lowest_min_between_maxima], marker='s', color='magenta', s=80, label='Pre-Max Minimum')
-        plt.legend()
+        plt.plot(x_vals, y_vals, color='skyblue')
+        plt.xlabel("Distance")
+        plt.ylabel("Probability Density")
+        # plt.scatter(x_vals[downward_inflection_points], y_vals[downward_inflection_points], color='red', marker='o', label='Downward Inflection Points')
+        # plt.scatter(x_vals[upward_inflection_points], y_vals[upward_inflection_points], color='blue', marker='x', label='Upward Inflection Points')
+        # plt.scatter(x_vals[minima_points], y_vals[minima_points], color='orange', marker='o', label='Minima Points')
+        # plt.scatter(x_vals[maxima_points], y_vals[maxima_points], color='purple', marker='x', label='Maxima Points')
+        # if lowest_min_between_maxima is not None:
+        #     plt.scatter(x_vals[lowest_min_between_maxima], y_vals[lowest_min_between_maxima], marker='s', color='magenta', s=80, label='Pre-Max Minimum')
+        # plt.legend()
 
         #plt.show(block=False)
         #plt.show()
@@ -146,9 +147,6 @@ class ShapeDecomposition:
         # narray = np.column_stack((x_vals, y_vals))
         # chart_node = slicer.util.plot(narray, xColumnIndex=0, title="PDF")
         # slicer.app.processEvents()
-
-        SpineLib.SlicerTools.createModelNode(vertebral_body, "Vertebral Body", opacity=0.8)
-        SpineLib.SlicerTools.createModelNode(processes, "Processes", color=[0.5, 0.5, 0.5], opacity=0.8)
 
         return threshold, vertebral_body, processes
     
@@ -213,8 +211,7 @@ class ShapeDecomposition:
             ):
 
         #SpineLib.SlicerTools.createMarkupsFiducialNode([landmarks["left_pedicle_com"],landmarks["right_pedicle_com"]], "Lamina Endpoints")
-        SpineLib.SlicerTools.createMarkupsFiducialNode([landmarks["left_pedicle_medial"], landmarks["right_pedicle_medial"]], "Pedicle")
-        centerline_lamina = ShapeDecomposition.centerline(processes, landmarks["left_pedicle_medial"], landmarks["right_pedicle_medial"], index, "Lamina")
+        centerline_lamina = ShapeDecomposition.centerline(processes, landmarks["left_pedicle_com"], landmarks["right_pedicle_com"], index, "Lamina")
         centerline_lamina_points = centerline_lamina.GetCurvePointsWorld()
         centerline_lamina_points = numpy_support.vtk_to_numpy(centerline_lamina_points.GetData())
         centerline_lamina_samples = [centerline_lamina_points[i] for i in range(0, len(centerline_lamina_points), len(centerline_lamina_points)//6)]
@@ -290,12 +287,14 @@ class ShapeDecomposition:
 
 
 
-        segmented_polydata, process_polydata = ShapeDecomposition.centerline_segmentation(processes, body, centerlines, index)
+        segmented_polydata, process_polydata = ShapeDecomposition.centerline_segmentation(geometry, body, centerlines, index)
         #segmented_polydata, process_polydata = ShapeDecomposition.collapsed_centerline_segmentation(initial_segmented_polydata, centerlines)
         #segmented_polydata, process_polydata = ShapeDecomposition.approx_centerline_segmentation(initial_segmented_polydata, approx_centerlines)
-        # get all centerline curve nodes
-        #centerline_nodes = [centerlines[name] for name in process_landmarks.keys()]
-        #SpineLib.SlicerTools.removeNodes(centerline_nodes)
+        # # get all centerline curve nodes
+        # centerline_nodes = [centerlines[name] for name in process_landmarks.keys()]
+        # SpineLib.SlicerTools.removeNodes(centerline_nodes)
+
+        #SpineLib.SlicerTools.createModelNode(segmented_polydata, "segmented_polydata")
         
         return segmented_polydata, process_polydata, process_landmarks, centerlines
         #return None, None, None, None
@@ -436,8 +435,8 @@ class ShapeDecomposition:
             
             # lumbar spine
             if(index <= 4):
-                landmarks["ASL"] = sorted(process_points["ASL"], key=(lambda p: np.array(p).dot(np.average([orientation.s, -orientation.a, -orientation.r], axis=0))))[-1]
-                landmarks["ASR"] = sorted(process_points["ASR"], key=(lambda p: np.array(p).dot(np.average([orientation.s, -orientation.a, orientation.r], axis=0))))[-1]
+                landmarks["ASL"] = sorted(process_points["ASL"], key=(lambda p: np.array(p).dot(np.average([orientation.s, orientation.s, -orientation.a, -orientation.r], axis=0))))[-1]
+                landmarks["ASR"] = sorted(process_points["ASR"], key=(lambda p: np.array(p).dot(np.average([orientation.s, orientation.s, -orientation.a, orientation.r], axis=0))))[-1]
                 landmarks["AIL"] = sorted(process_points["AIL"], key=(lambda p: np.array(p).dot(np.average([orientation.s], axis=0))))[0]
                 landmarks["AIR"] = sorted(process_points["AIR"], key=(lambda p: np.array(p).dot(np.average([orientation.s], axis=0))))[0]
                 landmarks["S"]   = sorted(process_points["S"], key=(lambda p: np.array(p).dot(orientation.a)))[0]
@@ -512,8 +511,8 @@ class ShapeDecomposition:
                 sorted_symmetry_intersection_points = conv.sorted_points(list(symmetry_intersection_points), orientation.a)
 
                 landmarks["S"]   = sorted(sorted_symmetry_intersection_points, key=(lambda p: np.array(p).dot(orientation.a)))[0]
-                landmarks["ASL"] = sorted(process_points["L"], key=(lambda p: np.array(p).dot(orientation.s)))[-1]
-                landmarks["ASR"] = sorted(process_points["R"], key=(lambda p: np.array(p).dot(orientation.s)))[-1]
+                landmarks["ASL"] = sorted(process_points["L"], key=(lambda p: np.array(p).dot(np.average([orientation.s, orientation.s, -orientation.r], axis=0))))[-1]
+                landmarks["ASR"] = sorted(process_points["R"], key=(lambda p: np.array(p).dot(np.average([orientation.s, orientation.s, orientation.r], axis=0))))[-1]
                 landmarks["AIL"] = sorted(process_points["L"], key=(lambda p: np.array(p).dot(orientation.s)))[0]
                 landmarks["AIR"] = sorted(process_points["R"], key=(lambda p: np.array(p).dot(orientation.s)))[0]
                 landmarks["TL"]  = sorted(process_points["L"], key=(lambda p: np.array(p).dot(orientation.a)))[-1]
@@ -625,8 +624,15 @@ class ShapeDecomposition:
 
         polydata.GetPointData().SetScalars(vtk_labels)
 
-        # filter polydatas
-        ids = {name: [i for i in range(polydata.GetNumberOfPoints()) if polydata.GetPointData().GetScalars().GetValue(i) != list(centerlines.keys()).index(name)] for name in centerlines.keys()}
+        # # filter polydatas
+        # try:
+        #     ids = {name: [i for i in range(polydata.GetNumberOfPoints()) if polydata.GetPointData().GetScalars().GetValue(i) != list(centerlines.keys()).index(name)] for name in centerlines.keys()}
+        # except ValueError as e:
+        #     print(f"Error occurred: {e}")
+
+        print("Number of vertices: ", polydata.GetNumberOfPoints())
+        print("Number of scalars: ", polydata.GetPointData().GetScalars().GetNumberOfTuples())
+        ids = {name: [i for i in range(polydata.GetNumberOfPoints()) if polydata.GetPointData().GetScalars().GetValue(i)-1 != list(centerlines.keys()).index(name)] for name in centerlines.keys()}
         process_polydatas = {name: conv.filter_point_ids(polydata, condition=lambda vertex: vertex in ids[name]) for name in centerlines.keys()}
 
         #SpineLib.SlicerTools.createModelNode(polydata, "segmented_polydata"+str(index))
@@ -660,13 +666,13 @@ class ShapeDecomposition:
 
         return polydata, process_polydatas
 
-    def centerline(polydata, startPoint, endPoint, index, name):
+    def centerline(polydata, startPoint, endPoints, index, name):
         
         pointMarkup = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsFiducialNode', "Points")
         pointMarkup.GetDisplayNode().SetTextScale(0.0)
         pointMarkup.GetDisplayNode().SetSelectedColor(0, 0, 1)
         pointMarkup.AddControlPoint(startPoint)
-        pointMarkup.AddControlPoint(endPoint)
+        pointMarkup.AddControlPoint(endPoints)
 
         extractLogic = ExtractCenterline.ExtractCenterlineLogic()
         targetNumberOfPoints = 5000.0
