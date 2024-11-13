@@ -39,7 +39,7 @@ class ShapeDecomposition:
                  ) -> None:
         
         lib_vertebraIDs = ["L5", "L4", "L3", "L2", "L1",
-                           "T12", "T11", "T10", "T9", "T8", "T7", "T6", "T5", "T4", "T3", "T2", "T1",
+                           "T13", "T12", "T11", "T10", "T9", "T8", "T7", "T6", "T5", "T4", "T3", "T2", "T1",
                            "C7", "C6", "C5", "C4", "C3", "C2", "C1"]
         
         print("Semantic Segmentation of " + lib_vertebraIDs[index] + " ...")
@@ -72,7 +72,7 @@ class ShapeDecomposition:
 
         landmark = conv.get_intersection_points(geometry, center, (center + (orientation.a * size.depth)))
         # for cervical spine, take the center of the geometry as landmark
-        if (index >= 17):
+        if (index >= 18):
             landmark = (center + landmark) / 2.0
             #landmark = center
 
@@ -168,7 +168,7 @@ class ShapeDecomposition:
         landmarks = {}
 
         body_front = conv.get_intersection_points(geometry, center, (center + (orientation.a * size.depth)))
-        if (index >= 17):
+        if (index >= 18):
             body_front = (center + body_front) / 2.0
             #sphere_origin = center
         canal_center = body_front - orientation.a * threshold
@@ -402,7 +402,7 @@ class ShapeDecomposition:
         landmarks = {}
 
         # thoracic and lumbar spine w/out T12 and T11
-        if (index < 17 and index != 5 and index != 6):
+        if (index < 18 and index != 5 and index != 6 and index != 7):
 
             labels, cluster_centers = ShapeDecomposition.k_means(polydata_points, 8)
             #SpineLib.SlicerTools.createMarkupsFiducialNode(cluster_centers, "Cluster Centers"+str(index))
@@ -455,7 +455,7 @@ class ShapeDecomposition:
 
 
         # thoracic spine T12
-        elif (index == 5 or index == 6):
+        elif (index == 5 or index == 6 or index == 7):
             labels, cluster_centers = ShapeDecomposition.k_means(polydata_points, 5)
 
             ######################################### Find process clusters ################################################################
