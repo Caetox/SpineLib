@@ -118,13 +118,16 @@ class ShapeDecomposition:
             
         # Highlight inflection, minima, and maxima points on the plot with different colors
         plt.ioff()
-        plt.scatter(x_vals[downward_inflection_points], y_vals[downward_inflection_points], color='red', marker='o', label='Downward Inflection Points')
-        plt.scatter(x_vals[upward_inflection_points], y_vals[upward_inflection_points], color='blue', marker='x', label='Upward Inflection Points')
-        plt.scatter(x_vals[minima_points], y_vals[minima_points], color='orange', marker='o', label='Minima Points')
-        plt.scatter(x_vals[maxima_points], y_vals[maxima_points], color='purple', marker='x', label='Maxima Points')
-        if lowest_min_between_maxima is not None:
-            plt.scatter(x_vals[lowest_min_between_maxima], y_vals[lowest_min_between_maxima], marker='s', color='magenta', s=80, label='Pre-Max Minimum')
-        plt.legend()
+        plt.plot(x_vals, y_vals, color='skyblue')
+        plt.xlabel("Distance")
+        plt.ylabel("Probability Density")
+        # plt.scatter(x_vals[downward_inflection_points], y_vals[downward_inflection_points], color='red', marker='o', label='Downward Inflection Points')
+        # plt.scatter(x_vals[upward_inflection_points], y_vals[upward_inflection_points], color='blue', marker='x', label='Upward Inflection Points')
+        # plt.scatter(x_vals[minima_points], y_vals[minima_points], color='orange', marker='o', label='Minima Points')
+        # plt.scatter(x_vals[maxima_points], y_vals[maxima_points], color='purple', marker='x', label='Maxima Points')
+        # if lowest_min_between_maxima is not None:
+        #     plt.scatter(x_vals[lowest_min_between_maxima], y_vals[lowest_min_between_maxima], marker='s', color='magenta', s=80, label='Pre-Max Minimum')
+        # plt.legend()
 
         #plt.show(block=False)
         #plt.show()
@@ -290,12 +293,14 @@ class ShapeDecomposition:
 
 
 
-        segmented_polydata, process_polydata = ShapeDecomposition.centerline_segmentation(processes, body, centerlines, index)
+        segmented_polydata, process_polydata = ShapeDecomposition.centerline_segmentation(geometry, body, centerlines, index)
         #segmented_polydata, process_polydata = ShapeDecomposition.collapsed_centerline_segmentation(initial_segmented_polydata, centerlines)
         #segmented_polydata, process_polydata = ShapeDecomposition.approx_centerline_segmentation(initial_segmented_polydata, approx_centerlines)
-        # get all centerline curve nodes
-        #centerline_nodes = [centerlines[name] for name in process_landmarks.keys()]
-        #SpineLib.SlicerTools.removeNodes(centerline_nodes)
+        # # get all centerline curve nodes
+        # centerline_nodes = [centerlines[name] for name in process_landmarks.keys()]
+        # SpineLib.SlicerTools.removeNodes(centerline_nodes)
+
+        #SpineLib.SlicerTools.createModelNode(segmented_polydata, "segmented_polydata")
         
         return segmented_polydata, process_polydata, process_landmarks, centerlines
         #return None, None, None, None
@@ -436,8 +441,8 @@ class ShapeDecomposition:
             
             # lumbar spine
             if(index <= 4):
-                landmarks["ASL"] = sorted(process_points["ASL"], key=(lambda p: np.array(p).dot(np.average([orientation.s, -orientation.a, -orientation.r], axis=0))))[-1]
-                landmarks["ASR"] = sorted(process_points["ASR"], key=(lambda p: np.array(p).dot(np.average([orientation.s, -orientation.a, orientation.r], axis=0))))[-1]
+                landmarks["ASL"] = sorted(process_points["ASL"], key=(lambda p: np.array(p).dot(np.average([orientation.s, orientation.s, -orientation.a, -orientation.r], axis=0))))[-1]
+                landmarks["ASR"] = sorted(process_points["ASR"], key=(lambda p: np.array(p).dot(np.average([orientation.s, orientation.s, -orientation.a, orientation.r], axis=0))))[-1]
                 landmarks["AIL"] = sorted(process_points["AIL"], key=(lambda p: np.array(p).dot(np.average([orientation.s], axis=0))))[0]
                 landmarks["AIR"] = sorted(process_points["AIR"], key=(lambda p: np.array(p).dot(np.average([orientation.s], axis=0))))[0]
                 landmarks["S"]   = sorted(process_points["S"], key=(lambda p: np.array(p).dot(orientation.a)))[0]
@@ -512,8 +517,8 @@ class ShapeDecomposition:
                 sorted_symmetry_intersection_points = conv.sorted_points(list(symmetry_intersection_points), orientation.a)
 
                 landmarks["S"]   = sorted(sorted_symmetry_intersection_points, key=(lambda p: np.array(p).dot(orientation.a)))[0]
-                landmarks["ASL"] = sorted(process_points["L"], key=(lambda p: np.array(p).dot(orientation.s)))[-1]
-                landmarks["ASR"] = sorted(process_points["R"], key=(lambda p: np.array(p).dot(orientation.s)))[-1]
+                landmarks["ASL"] = sorted(process_points["L"], key=(lambda p: np.array(p).dot(np.average([orientation.s, orientation.s, -orientation.r], axis=0))))[-1]
+                landmarks["ASR"] = sorted(process_points["R"], key=(lambda p: np.array(p).dot(np.average([orientation.s, orientation.s, orientation.r], axis=0))))[-1]
                 landmarks["AIL"] = sorted(process_points["L"], key=(lambda p: np.array(p).dot(orientation.s)))[0]
                 landmarks["AIR"] = sorted(process_points["R"], key=(lambda p: np.array(p).dot(orientation.s)))[0]
                 landmarks["TL"]  = sorted(process_points["L"], key=(lambda p: np.array(p).dot(orientation.a)))[-1]
@@ -625,8 +630,15 @@ class ShapeDecomposition:
 
         polydata.GetPointData().SetScalars(vtk_labels)
 
-        # filter polydatas
-        ids = {name: [i for i in range(polydata.GetNumberOfPoints()) if polydata.GetPointData().GetScalars().GetValue(i) != list(centerlines.keys()).index(name)] for name in centerlines.keys()}
+        # # filter polydatas
+        # try:
+        #     ids = {name: [i for i in range(polydata.GetNumberOfPoints()) if polydata.GetPointData().GetScalars().GetValue(i) != list(centerlines.keys()).index(name)] for name in centerlines.keys()}
+        # except ValueError as e:
+        #     print(f"Error occurred: {e}")
+
+        print("Number of vertices: ", polydata.GetNumberOfPoints())
+        print("Number of scalars: ", polydata.GetPointData().GetScalars().GetNumberOfTuples())
+        ids = {name: [i for i in range(polydata.GetNumberOfPoints()) if polydata.GetPointData().GetScalars().GetValue(i)-1 != list(centerlines.keys()).index(name)] for name in centerlines.keys()}
         process_polydatas = {name: conv.filter_point_ids(polydata, condition=lambda vertex: vertex in ids[name]) for name in centerlines.keys()}
 
         #SpineLib.SlicerTools.createModelNode(polydata, "segmented_polydata"+str(index))
