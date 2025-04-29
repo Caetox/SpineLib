@@ -22,7 +22,7 @@ class Vertebra:
                  ) -> None:
         
         lib_vertebraIDs = ["L5", "L4", "L3", "L2", "L1",
-                           "T12", "T11", "T10", "T9", "T8", "T7", "T6", "T5", "T4", "T3", "T2", "T1",
+                           "T13", "T12", "T11", "T10", "T9", "T8", "T7", "T6", "T5", "T4", "T3", "T2", "T1",
                            "C7", "C6", "C5", "C4", "C3", "C2", "C1"]
         
         self.index           = index
