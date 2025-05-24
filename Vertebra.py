@@ -13,6 +13,7 @@ import os
 class Vertebra:
 
     def __init__(self,
+                 modelNode          = None,
                  spineGeometries:   vtk.vtkPolyData         = None,
                  geometry:          vtk.vtkPolyData         = None,
                  index:             int                     = None,
@@ -25,28 +26,28 @@ class Vertebra:
                            "T13", "T12", "T11", "T10", "T9", "T8", "T7", "T6", "T5", "T4", "T3", "T2", "T1",
                            "C7", "C6", "C5", "C4", "C3", "C2", "C1"]
         
+        self.modelNode       = modelNode
         self.index           = index
         self.landmarks       = landmarks
         self.spineGeometries = spineGeometries
         self.ligament_landmarks = {}
         self.name = lib_vertebraIDs[index]
+        self.modelName = modelNode.GetName()
 
-        # # calculate landmarks, if not provided
-        # if (self.landmarks == None):
+        if self.name in ["C3", "C4", "C5", "C6", "C7"]:
+            max_angle = 45.0
+
+        # calculate landmarks
         self.geometry       	      = geometry
         self.center                   = np.array(conv.calc_center_of_mass(self.geometry))
         self.symmetry_plane           = SpineLib.SymmetryPlane.fit_symmetry_plane(geometry=geometry, numIterations=1)    
         self.orientation              = Vertebra._init_orientation(self.spineGeometries, self.geometry, self.center, spineOrientation, self.symmetry_plane, self.index)
         self.body                     = SpineLib.VertebralBody(body=self.geometry, center=self.center, orientation=self.orientation, max_angle=max_angle)
         self.landmarks                = Vertebra._init_landmarks(body=self.body)
-
-        #SpineLib.SlicerTools.createMarkupsFiducialNode([self.center], name="Center init")
         
         self.center                   = Vertebra._init_center(self.landmarks)
         self.size, self.orientation   = Vertebra._init_properties(landmarks=self.landmarks)
         self.objectToWorldMatrix      = Vertebra._init_objectToWorldMatrix(self.center, self.size, self.orientation)
-
-        #SpineLib.SlicerTools.createMarkupsFiducialNode([self.center], name="Center final")
 
 
     '''

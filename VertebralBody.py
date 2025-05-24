@@ -19,7 +19,7 @@ class VertebralBody:
         # extract endplates
         self.superior_endplate = VertebralBody._extract_endplate(body=body, center=center, orientation_clip=orientation.a, orientation_extract=orientation.s, max_angle=max_angle)
         self.inferior_endplate = VertebralBody._extract_endplate(body=body, center=center, orientation_clip=orientation.a, orientation_extract=-orientation.s, max_angle=max_angle)
-        
+
         # get sagittal curves
         self.superior_sagittal_curve = VertebralBody._extract_curve(self.superior_endplate, plane_origin=center, plane_normal=orientation.r, curve_direction=orientation.a)
         self.inferior_sagittal_curve = VertebralBody._extract_curve(self.inferior_endplate, plane_origin=center, plane_normal=orientation.r, curve_direction=orientation.a)
@@ -48,7 +48,7 @@ class VertebralBody:
 
         return endplate
     
-    
+    # Extract a curve by cutting the surface and calculating the main component
     def _extract_curve(
             endplate: vtk.vtkPolyData, plane_origin: np.array, plane_normal: np.array, curve_direction: np.array) -> SpineLib.Curve:
         geometry = conv.cut_plane(endplate, plane_origin, plane_normal)

@@ -557,6 +557,8 @@ def sorted_points(geometry, main_axis):
 
     return sorted(points, key=projection)
 
+
+''' Get intersection points between two points and a model.'''
 def get_intersection_points(polydata, point1, point2):
 
     # Create a locator for the model
@@ -578,6 +580,8 @@ def get_intersection_points(polydata, point1, point2):
 
     return intersection_point
 
+
+''' Get intersection points between a curve and a model.'''
 def get_curve_intersection_points(model, curve_node):
     # Get model and curve objects
     curve = curve_node.GetCurvePointsWorld()
@@ -612,6 +616,7 @@ def get_curve_intersection_points(model, curve_node):
     return intersection_points
 
 
+''' Calculate the eigenvectors with PCA'''
 def pca_eigenvectors(points):
     # Compute the covariance matrix and principal components without centering
     Cov = np.cov(points.T)
@@ -620,12 +625,14 @@ def pca_eigenvectors(points):
     return eigvect.T, eigval.T
 
 
+''' Voxelize a vtkPolyData object and return the points of the voxels.'''
 def voxelization(geometry: vtkPolyData, factor):
     bounds = geometry.GetBounds()
     diagonal_length = ((bounds[1] - bounds[0])**2 + (bounds[3] - bounds[2])**2 + (bounds[5] - bounds[4])**2)**0.5
     density = diagonal_length / factor
     voxels = pv.voxelize(geometry, density=density)
     return voxels.points
+
 
 '''
 Find id of the closest vertex to given point
@@ -647,7 +654,7 @@ def find_closest_points(polydata, points):
 
     return closest_points
 
-
+''' Dijkstra algorithm'''
 def runDijkstra(polydata, point1, point2):
 
     points = vtkPoints()
@@ -674,6 +681,7 @@ def runDijkstra(polydata, point1, point2):
     return points
 
 
+''' Calculate sagittal angles between vectors.'''
 def calcSagittalAngles(vectors):
 
     angles = []
@@ -691,6 +699,8 @@ def calcSagittalAngles(vectors):
 
     return angles
 
+
+''' Filter the largest region of a polydata object.'''
 def filterLargestRegion(polydata):
 
     connectivity_filter = vtkPolyDataConnectivityFilter()
@@ -723,6 +733,7 @@ def fitPlane(points):
 
     return center, normal
 
+
 '''
 Remesh polydata
 '''
@@ -740,6 +751,7 @@ def polydata_remesh(polydata, subdivide=2, clusters=5000):
     outputMesh.DeepCopy(clus.create_mesh())
 
     return outputMesh
+
 
 '''
 Smooth polydata
@@ -761,6 +773,7 @@ def polydata_smooth(polydata, method='Taubin', iterations=30, laplaceRelaxationF
 
     return outputMesh
 
+
 '''
 Fill holes in polydata
 '''
@@ -781,6 +794,7 @@ def polydata_fillHoles(polydata, maximumHoleSize=1000.0):
 
     return outputMesh
 
+
 '''
 Polydata append filter
 '''
@@ -793,6 +807,7 @@ def polydata_append(polydata_1, polydata_2):
     outputPolydata = polydata_clean(appendFilter.GetOutput())
 
     return outputPolydata
+
 
 '''
 Convex hull of polydata
@@ -807,6 +822,7 @@ def polydata_convexHull(polydata):
     outputMesh = polydata_clean(outerSurface.GetOutput())
 
     return outputMesh
+
 
 '''
 Get contact polydata between two polydata
@@ -837,6 +853,7 @@ def get_contact_polydata(polydata_1, polydata_2):
 
     return contact_polydata
 
+
 '''
 Get IDs of boundary edges of polydata
 '''
@@ -855,6 +872,8 @@ def extractBoundary(polydata):
 
     return edges
 
+
+''' Apply a transformation matrix to a vtkPolyData object.'''
 def transform_polydata(polydata, transformMatrix):
     
         transform = vtkTransform()
