@@ -53,7 +53,7 @@ class ShapeDecomposition:
         if original_model is not None:
             orig_body = conv.clip_sphere(original_model, self.landmarks["body_front"], self.threshold, InsideOut=True)
             self.label_Model, _ = ShapeDecomposition.centerline_segmentation(original_model, orig_body, self.centerlines, index)
-            SpineLib.SlicerTools.createModelNode(self.label_Model, "label_model")
+            # SpineLib.SlicerTools.createModelNode(self.label_Model, "label_model")
 
         # progress bar in slicer widget
         if progressBarManager is not None: progressBarManager.updateProgress()
